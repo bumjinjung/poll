@@ -21,6 +21,7 @@ export default function PollClient({
   const [votes, setVotes] = useState<VoteData>(initialVotes);
   const [selected, setSelected] = useState<"A" | "B" | null>(null);
   const [showResult, setShowResult] = useState(false);
+  const [synced, setSynced] = useState(false);
 
   const storageKey = useMemo(
     () => `poll-voted-${config.question}`,
@@ -71,7 +72,10 @@ export default function PollClient({
     try {
       const res = await fetch("/api/vote", { cache: "no-store" });
       const data = await res.json();
-      if (data.success) setVotes(data.votes);
+      if (data.success) {
+        setVotes(data.votes);
+        setSynced(true);
+      }
     } catch {}
   };
 
@@ -88,6 +92,7 @@ export default function PollClient({
       if (data.success) {
         setVotes(data.votes);
         setTimeout(() => {
+          setSynced(true);
           setShowResult(true);
           localStorage.setItem(storageKey, JSON.stringify({ selected: choice }));
         }, 400);
@@ -136,7 +141,7 @@ export default function PollClient({
               <div className={`text-sm sm:text-base md:text-lg font-semibold transition-colors ${selected === "A" ? "text-white" : "text-gray-800"}`}>
                 {config.left.label}
               </div>
-              {showResult && (
+              {showResult && synced && (
                 <div className={`mt-1 sm:mt-2 animate-fadeIn ${selected === "A" ? "text-white" : "text-gray-700"}`}>
                   <div className="text-xl sm:text-2xl font-bold mb-0.5">{percentA}%</div>
                   <div className={`text-xs ${selected === "A" ? "text-blue-100" : "text-gray-500"}`}>{votes.A} votes</div>
@@ -172,7 +177,7 @@ export default function PollClient({
               <div className={`text-sm sm:text-base md:text-lg font-semibold transition-colors ${selected === "B" ? "text-white" : "text-gray-800"}`}>
                 {config.right.label}
               </div>
-              {showResult && (
+              {showResult && synced && (
                 <div className={`mt-1 sm:mt-2 animate-fadeIn ${selected === "B" ? "text-white" : "text-gray-700"}`}>
                   <div className="text-xl sm:text-2xl font-bold mb-0.5">{percentB}%</div>
                   <div className={`text-xs ${selected === "B" ? "text-purple-100" : "text-gray-500"}`}>{votes.B} votes</div>
@@ -185,7 +190,7 @@ export default function PollClient({
           </button>
         </div>
 
-        {showResult && (
+        {showResult && synced && (
           <div className="text-center">
             <p className="text-sm text-gray-400">총 {total.toLocaleString()}명 참여</p>
           </div>
