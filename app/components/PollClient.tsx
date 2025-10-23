@@ -108,7 +108,7 @@ export default function PollClient({
   const percentB = total > 0 ? Math.round((votes.B / total) * 100) : 50;
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center p-4 sm:p-6">
+    <div className="h-screen overflow-hidden flex flex-col items-center justify-center p-4 sm:p-6">
       <div className="w-full max-w-4xl flex flex-col items-center gap-12 sm:gap-16 md:gap-20">
         <div className="text-center px-4">
           <h2 className="text-2xl sm:text-3xl md:text-4xl font-semibold text-gray-800">
@@ -190,11 +190,9 @@ export default function PollClient({
           </button>
         </div>
 
-        {showResult && synced && (
-          <div className="text-center">
-            <p className="text-sm text-gray-400">총 {total.toLocaleString()}명 참여</p>
-          </div>
-        )}
+        <div className={`text-center ${!showResult || !synced ? "invisible" : ""}`}>
+          <p className="text-sm text-gray-400">총 {total.toLocaleString()}명 참여</p>
+        </div>
       </div>
     </div>
   );
