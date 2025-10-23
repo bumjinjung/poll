@@ -33,30 +33,17 @@ export default async function Image() {
             padding: '80px',
           }}
         >
-          {/* 타이틀 */}
+          {/* 메인 타이틀 */}
           <div
             style={{
-              fontSize: 80,
+              fontSize: 72,
               fontWeight: 'bold',
               color: 'white',
-              marginBottom: 30,
               textAlign: 'center',
+              lineHeight: 1.3,
             }}
           >
-            Poll
-          </div>
-
-          {/* 설명 */}
-          <div
-            style={{
-              fontSize: 36,
-              color: 'rgba(255, 255, 255, 0.95)',
-              textAlign: 'center',
-              maxWidth: 900,
-              lineHeight: 1.4,
-            }}
-          >
-            매일 하나씩 가벼운 설문조사
+            매일 하나씩<br />가벼운 설문조사
           </div>
 
           {/* 데코레이션 */}
