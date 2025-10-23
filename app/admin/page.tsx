@@ -9,7 +9,9 @@ type Config = {
 };
 
 export default function AdminPage() {
-  const [adminKey, setAdminKey] = useState("dev-admin");
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [inputKey, setInputKey] = useState("");
+  const [adminKey, setAdminKey] = useState("");
   const [config, setConfig] = useState<Config>({
     question: "",
     left: { label: "" },
@@ -19,16 +21,33 @@ export default function AdminPage() {
   const [currentVotes, setCurrentVotes] = useState({ A: 0, B: 0 });
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [loginError, setLoginError] = useState("");
 
   useEffect(() => {
-    fetch("/api/admin/today", { cache: "no-store" })
-      .then((r) => r.json())
-      .then((res) => {
-        if (res?.data) setConfig(res.data);
-        if (res?.votes) setCurrentVotes(res.votes);
-      })
-      .catch(() => {});
-  }, []);
+    if (isAuthenticated) {
+      fetch("/api/admin/today", { cache: "no-store" })
+        .then((r) => r.json())
+        .then((res) => {
+          if (res?.data) setConfig(res.data);
+          if (res?.votes) setCurrentVotes(res.votes);
+        })
+        .catch(() => {});
+    }
+  }, [isAuthenticated]);
+
+  const handleLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoginError("");
+    
+    // 간단한 클라이언트 측 검증 (실제 검증은 API에서)
+    if (inputKey.length < 3) {
+      setLoginError("관리자 키가 너무 짧습니다.");
+      return;
+    }
+    
+    setAdminKey(inputKey);
+    setIsAuthenticated(true);
+  };
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -60,22 +79,64 @@ export default function AdminPage() {
     }
   };
 
+  // 로그인하지 않았으면 로그인 화면 표시
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-6">
+        <form
+          onSubmit={handleLogin}
+          className="w-full max-w-md space-y-6 bg-white rounded-2xl p-8 shadow-lg"
+        >
+          <div className="text-center">
+            <h1 className="text-3xl font-bold mb-2">🔒 Admin</h1>
+            <p className="text-sm text-gray-600">관리자 인증이 필요합니다</p>
+          </div>
+
+          <div className="space-y-2">
+            <label className="block text-sm font-medium text-gray-700">관리자 키</label>
+            <input
+              type="password"
+              value={inputKey}
+              onChange={(e) => setInputKey(e.target.value)}
+              className="w-full rounded-lg border border-gray-300 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-black"
+              placeholder="관리자 키를 입력하세요"
+              required
+            />
+            {loginError && (
+              <p className="text-sm text-red-600">{loginError}</p>
+            )}
+          </div>
+
+          <button
+            type="submit"
+            className="w-full rounded-lg bg-black text-white py-3 font-semibold hover:bg-gray-800 transition"
+          >
+            로그인
+          </button>
+        </form>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen flex items-center justify-center p-6">
       <form
         onSubmit={onSubmit}
         className="w-full max-w-xl space-y-6 bg-white rounded-2xl p-6 shadow"
       >
-        <h1 className="text-2xl font-semibold">오늘의 2지선다 설정</h1>
-
-        <div className="space-y-2">
-          <label className="block text-sm text-gray-600">관리자 키</label>
-          <input
-            value={adminKey}
-            onChange={(e) => setAdminKey(e.target.value)}
-            className="w-full rounded-md border border-gray-300 px-3 py-2"
-            placeholder="dev-admin 또는 환경변수 ADMIN_KEY"
-          />
+        <div className="flex items-center justify-between">
+          <h1 className="text-2xl font-semibold">오늘의 2지선다 설정</h1>
+          <button
+            type="button"
+            onClick={() => {
+              setIsAuthenticated(false);
+              setAdminKey("");
+              setInputKey("");
+            }}
+            className="text-sm text-gray-600 hover:text-black"
+          >
+            로그아웃
+          </button>
         </div>
 
         <div className="space-y-2">

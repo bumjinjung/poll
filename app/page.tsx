@@ -67,8 +67,13 @@ export default function Home() {
     }
   };
 
-  // 질문이 바뀌면 투표 상태 초기화
+  // 질문이 바뀌면 투표 상태 초기화 (로딩 완료 후에만 실행)
   useEffect(() => {
+    // 로딩 중이거나 질문이 없으면 스킵
+    if (loading || config.question === "로딩 중...") {
+      return;
+    }
+
     const savedVote = localStorage.getItem(storageKey);
     if (savedVote) {
       const data = JSON.parse(savedVote);
@@ -78,7 +83,7 @@ export default function Home() {
       setSelected(null);
       setShowResult(false);
     }
-  }, [storageKey]);
+  }, [storageKey, loading, config.question]);
 
   const handleVote = async (choice: "A" | "B") => {
     if (showResult) return;
@@ -128,23 +133,23 @@ export default function Home() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center p-6">
-      <div className="w-full max-w-4xl flex flex-col items-center gap-20">
+    <div className="min-h-screen flex flex-col items-center justify-center p-4 sm:p-6">
+      <div className="w-full max-w-4xl flex flex-col items-center gap-12 sm:gap-16 md:gap-20">
         {/* 질문 */}
-        <div className="text-center">
-          <h2 className="text-4xl font-semibold text-gray-800">
+        <div className="text-center px-4">
+          <h2 className="text-2xl sm:text-3xl md:text-4xl font-semibold text-gray-800">
             {config.question}
           </h2>
         </div>
 
         {/* 선택지 - 좌우 배치 */}
-        <div className="flex items-center justify-center gap-4">
+        <div className="flex items-center justify-center gap-3 sm:gap-4">
           {/* 왼쪽(A) 버튼 */}
           <button
             onClick={() => handleVote("A")}
             disabled={showResult}
             className={`
-              group relative w-52 h-52 rounded-[2rem] overflow-hidden
+              group relative w-36 h-36 sm:w-44 sm:h-44 md:w-52 md:h-52 rounded-[1.5rem] sm:rounded-[2rem] overflow-hidden
               transition-all duration-300 ease-out
               ${showResult ? "cursor-default" : "cursor-pointer hover:scale-[1.02]"}
               ${
@@ -165,17 +170,17 @@ export default function Home() {
             `} />
 
             {/* 콘텐츠 */}
-            <div className="relative h-full flex flex-col items-center justify-center p-4 gap-2">
-              <div className={`text-5xl transition-transform duration-300 ${selected === "A" ? "scale-110" : "group-hover:scale-105"}`}>
+            <div className="relative h-full flex flex-col items-center justify-center p-3 sm:p-4 gap-1 sm:gap-2">
+              <div className={`text-3xl sm:text-4xl md:text-5xl transition-transform duration-300 ${selected === "A" ? "scale-110" : "group-hover:scale-105"}`}>
                 {config.left.emoji ?? ""}
               </div>
-              <div className={`text-lg font-semibold transition-colors ${selected === "A" ? "text-white" : "text-gray-800"}`}>
+              <div className={`text-sm sm:text-base md:text-lg font-semibold transition-colors ${selected === "A" ? "text-white" : "text-gray-800"}`}>
                 {config.left.label}
               </div>
 
               {showResult && (
-                <div className={`mt-2 animate-fadeIn ${selected === "A" ? "text-white" : "text-gray-700"}`}>
-                  <div className="text-2xl font-bold mb-0.5">{percentA}%</div>
+                <div className={`mt-1 sm:mt-2 animate-fadeIn ${selected === "A" ? "text-white" : "text-gray-700"}`}>
+                  <div className="text-xl sm:text-2xl font-bold mb-0.5">{percentA}%</div>
                   <div className={`text-xs ${selected === "A" ? "text-blue-100" : "text-gray-500"}`}>
                     {votes.A} votes
                   </div>
@@ -185,7 +190,7 @@ export default function Home() {
 
             {/* 선택 링 */}
             {selected === "A" && (
-              <div className="absolute inset-0 ring-4 ring-blue-400 ring-offset-4 ring-offset-transparent rounded-[2rem]" />
+              <div className="absolute inset-0 ring-4 ring-blue-400 ring-offset-4 ring-offset-transparent rounded-[1.5rem] sm:rounded-[2rem]" />
             )}
           </button>
 
@@ -194,7 +199,7 @@ export default function Home() {
             onClick={() => handleVote("B")}
             disabled={showResult}
             className={`
-              group relative w-52 h-52 rounded-[2rem] overflow-hidden
+              group relative w-36 h-36 sm:w-44 sm:h-44 md:w-52 md:h-52 rounded-[1.5rem] sm:rounded-[2rem] overflow-hidden
               transition-all duration-300 ease-out
               ${showResult ? "cursor-default" : "cursor-pointer hover:scale-[1.02]"}
               ${
@@ -215,17 +220,17 @@ export default function Home() {
             `} />
 
             {/* 콘텐츠 */}
-            <div className="relative h-full flex flex-col items-center justify-center p-4 gap-2">
-              <div className={`text-5xl transition-transform duration-300 ${selected === "B" ? "scale-110" : "group-hover:scale-105"}`}>
+            <div className="relative h-full flex flex-col items-center justify-center p-3 sm:p-4 gap-1 sm:gap-2">
+              <div className={`text-3xl sm:text-4xl md:text-5xl transition-transform duration-300 ${selected === "B" ? "scale-110" : "group-hover:scale-105"}`}>
                 {config.right.emoji ?? ""}
               </div>
-              <div className={`text-lg font-semibold transition-colors ${selected === "B" ? "text-white" : "text-gray-800"}`}>
+              <div className={`text-sm sm:text-base md:text-lg font-semibold transition-colors ${selected === "B" ? "text-white" : "text-gray-800"}`}>
                 {config.right.label}
               </div>
 
               {showResult && (
-                <div className={`mt-2 animate-fadeIn ${selected === "B" ? "text-white" : "text-gray-700"}`}>
-                  <div className="text-2xl font-bold mb-0.5">{percentB}%</div>
+                <div className={`mt-1 sm:mt-2 animate-fadeIn ${selected === "B" ? "text-white" : "text-gray-700"}`}>
+                  <div className="text-xl sm:text-2xl font-bold mb-0.5">{percentB}%</div>
                   <div className={`text-xs ${selected === "B" ? "text-purple-100" : "text-gray-500"}`}>
                     {votes.B} votes
                   </div>
@@ -235,7 +240,7 @@ export default function Home() {
 
             {/* 선택 링 */}
             {selected === "B" && (
-              <div className="absolute inset-0 ring-4 ring-purple-400 ring-offset-4 ring-offset-transparent rounded-[2rem]" />
+              <div className="absolute inset-0 ring-4 ring-purple-400 ring-offset-4 ring-offset-transparent rounded-[1.5rem] sm:rounded-[2rem]" />
             )}
           </button>
         </div>
