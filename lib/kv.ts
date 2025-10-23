@@ -227,6 +227,35 @@ export async function getHistoryByDate(date: string): Promise<PollHistoryItem | 
   return (await kv.get<PollHistoryItem>(historyKey)) || null;
 }
 
+// 모든 히스토리 불러오기
+export async function getPollHistory(): Promise<PollHistoryItem[]> {
+  const allHistory: PollHistoryItem[] = [];
+  
+  if (isDev) {
+    // 개발 환경: devStore에서 모든 poll:history:* 키 찾기
+    devStore.forEach((value, key) => {
+      if (key.startsWith("poll:history:")) {
+        allHistory.push(value as PollHistoryItem);
+      }
+    });
+  } else {
+    // 프로덕션: Vercel KV에서 모든 히스토리 조회
+    // Vercel KV는 패턴 검색을 지원하지 않으므로, 최근 일주일만 조회
+    for (let i = 0; i < 30; i++) {
+      const date = new Date();
+      date.setDate(date.getDate() - i);
+      const dateStr = date.toISOString().split("T")[0];
+      const historyKey = `poll:history:${dateStr}`;
+      const history = await (kv.get<PollHistoryItem>(historyKey));
+      if (history) {
+        allHistory.push(history);
+      }
+    }
+  }
+  
+  return allHistory;
+}
+
 // 자정에 자동으로 내일 poll을 오늘 poll로 전환
 export async function checkAndPromoteTomorrowPoll(): Promise<boolean> {
   const today = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
