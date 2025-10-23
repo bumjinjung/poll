@@ -31,7 +31,8 @@ export async function GET(req: NextRequest) {
       success: true, 
       data: pollData,
       votes: voteData,
-      tomorrow: tomorrowData
+      tomorrow: tomorrowData,
+      isAuthenticated: isAdmin
     });
   } catch (e) {
     console.error("GET poll error:", e);

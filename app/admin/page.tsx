@@ -74,13 +74,16 @@ export default function AdminPage() {
         },
       });
       
-      if (res.status === 401) {
-        setLoginError("잘못된 관리자 키입니다.");
+      if (!res.ok) {
+        setLoginError("로그인 중 오류가 발생했습니다.");
         return;
       }
       
-      if (!res.ok) {
-        setLoginError("로그인 중 오류가 발생했습니다.");
+      const data = await res.json();
+      
+      // isAuthenticated 플래그로 인증 확인
+      if (!data.isAuthenticated) {
+        setLoginError("잘못된 관리자 키입니다.");
         return;
       }
       
