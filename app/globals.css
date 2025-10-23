@@ -45,3 +45,29 @@ html {
 .animate-fadeIn {
   animation: fadeIn 0.5s ease-out;
 }
+
+/* 히스토리 페이지 애니메이션 */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* 바 차트 애니메이션 */
+@keyframes growBar {
+  from {
+    width: 0%;
+  }
+  to {
+    width: var(--target-width);
+  }
+}
+
+.bar-animation {
+  animation: growBar 1s ease-out forwards;
+}

@@ -1,10 +1,27 @@
-import { NextResponse } from "next/server";
-import { getPollHistory } from "@/lib/kv";
+// app/api/history/route.ts (Node.js Runtime + 캐시 헤더)
+// export const runtime = "edge"; // Edge Runtime은 Node.js 모듈을 지원하지 않음
 
-export async function GET() {
+import { NextResponse } from "next/server";
+import { fetchHistoryPage } from "@/lib/data";
+
+export async function GET(req: Request) {
   try {
-    const history = await getPollHistory();
-    return NextResponse.json({ success: true, history });
+    const { searchParams } = new URL(req.url);
+    const cursor = searchParams.get("cursor");
+    const limit = Number(searchParams.get("limit") ?? 20);
+
+    const data = await fetchHistoryPage({ cursor, limit });
+
+    const res = NextResponse.json({
+      success: true,
+      items: data.items,
+      nextCursor: data.nextCursor,
+      hasMore: data.hasMore
+    });
+    
+    // CDN 캐시 (1분), 느슨하게 재검증
+    res.headers.set("Cache-Control", "public, s-maxage=60, stale-while-revalidate=600");
+    return res;
   } catch (error) {
     console.error("Get history error:", error);
     return NextResponse.json(
