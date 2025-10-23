@@ -37,7 +37,12 @@ export default function AdminPage() {
   }, [isAuthenticated]);
 
   const fetchData = () => {
-    fetch("/api/admin/today", { cache: "no-store" })
+    fetch("/api/admin/today", { 
+      cache: "no-store",
+      headers: {
+        "x-admin-key": adminKey,
+      },
+    })
       .then((r) => r.json())
       .then((res) => {
         if (res?.data) setTodayConfig(res.data);
@@ -52,18 +57,39 @@ export default function AdminPage() {
       .catch(() => {});
   };
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoginError("");
     
-    // 간단한 클라이언트 측 검증 (실제 검증은 API에서)
     if (inputKey.length < 3) {
       setLoginError("관리자 키가 너무 짧습니다.");
       return;
     }
     
-    setAdminKey(inputKey);
-    setIsAuthenticated(true);
+    // 서버에서 비밀번호 검증
+    try {
+      const res = await fetch("/api/admin/today", {
+        headers: {
+          "x-admin-key": inputKey,
+        },
+      });
+      
+      if (res.status === 401) {
+        setLoginError("잘못된 관리자 키입니다.");
+        return;
+      }
+      
+      if (!res.ok) {
+        setLoginError("로그인 중 오류가 발생했습니다.");
+        return;
+      }
+      
+      // 로그인 성공
+      setAdminKey(inputKey);
+      setIsAuthenticated(true);
+    } catch (error) {
+      setLoginError("서버 연결에 실패했습니다.");
+    }
   };
 
   const onSubmit = async (e: React.FormEvent) => {
