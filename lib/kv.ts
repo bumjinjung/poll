@@ -17,6 +17,12 @@ export interface VoteData {
   B: number;
 }
 
+export interface PollHistoryItem {
+  date: string; // YYYY-MM-DD (UTC 기준 현재 로직과 동일)
+  poll: PollData;
+  votes: VoteData;
+}
+
 // 설문 질문 가져오기
 export async function getPollData(): Promise<PollData> {
   if (isDev) {
@@ -138,6 +144,47 @@ export async function setLastUpdateDate(date: string): Promise<void> {
   await kv.set("poll:last_update", date);
 }
 
+function getTodayDate(): string {
+  return new Date().toISOString().split("T")[0];
+}
+
+function getYesterdayDate(today: string): string {
+  const d = new Date(today + "T00:00:00.000Z");
+  d.setUTCDate(d.getUTCDate() - 1);
+  return d.toISOString().split("T")[0];
+}
+
+// 히스토리 스냅샷 저장 (중복 방지)
+export async function saveHistorySnapshot(date?: string): Promise<boolean> {
+  const dateKey = date || getTodayDate();
+  const historyKey = `poll:history:${dateKey}`;
+
+  if (isDev) {
+    if (devStore.get(historyKey)) return false;
+    const poll = await getPollData();
+    const votes = await getVoteData();
+    const item: PollHistoryItem = { date: dateKey, poll, votes };
+    devStore.set(historyKey, item);
+    return true;
+  }
+
+  const exists = await kv.exists(historyKey);
+  if (exists) return false;
+  const poll = await getPollData();
+  const votes = await getVoteData();
+  const item: PollHistoryItem = { date: dateKey, poll, votes };
+  await kv.set(historyKey, item);
+  return true;
+}
+
+export async function getHistoryByDate(date: string): Promise<PollHistoryItem | null> {
+  const historyKey = `poll:history:${date}`;
+  if (isDev) {
+    return devStore.get(historyKey) || null;
+  }
+  return (await kv.get<PollHistoryItem>(historyKey)) || null;
+}
+
 // 자정에 자동으로 내일 poll을 오늘 poll로 전환
 export async function checkAndPromoteTomorrowPoll(): Promise<boolean> {
   const today = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
@@ -147,6 +194,10 @@ export async function checkAndPromoteTomorrowPoll(): Promise<boolean> {
   if (lastUpdate === today) {
     return false;
   }
+
+  // 자정 진입 시, 전일 결과를 히스토리로 저장 (중복 방지)
+  const snapshotDate = lastUpdate || getYesterdayDate(today);
+  try { await saveHistorySnapshot(snapshotDate); } catch {}
 
   // 내일 poll이 있으면 오늘 poll로 승격
   const tomorrowPoll = await getTomorrowPoll();
