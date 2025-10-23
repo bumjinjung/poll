@@ -19,49 +19,94 @@ export default function Home() {
   });
 
   // 질문별로 로컬 스토리지 키를 분리(질문이 바뀌면 신규 투표로 취급)
-  const storageKey = `poll-2choice-${config.question}`;
+  const storageKey = `poll-voted-${config.question}`;
 
+  // 초기 데이터 로드
   useEffect(() => {
-    fetch("/api/admin/today", { cache: "no-store" })
-      .then((r) => r.json())
-      .then((res) => {
-        if (res?.data) setConfig(res.data);
-      })
-      .catch(() => {});
+    fetchPollData();
   }, []);
 
+  // 실시간 업데이트 (5초마다)
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (showResult) {
+        fetchVotes();
+      }
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, [showResult]);
+
+  // 설문 데이터 + 투표 결과 조회
+  const fetchPollData = async () => {
+    try {
+      const res = await fetch("/api/admin/today", { cache: "no-store" });
+      const data = await res.json();
+      if (data.success) {
+        setConfig(data.data);
+        setVotes(data.votes || { A: 0, B: 0 });
+      }
+    } catch (error) {
+      console.error("Failed to fetch poll data:", error);
+    }
+  };
+
+  // 투표 결과만 조회
+  const fetchVotes = async () => {
+    try {
+      const res = await fetch("/api/vote", { cache: "no-store" });
+      const data = await res.json();
+      if (data.success) {
+        setVotes(data.votes);
+      }
+    } catch (error) {
+      console.error("Failed to fetch votes:", error);
+    }
+  };
+
+  // 질문이 바뀌면 투표 상태 초기화
   useEffect(() => {
     const savedVote = localStorage.getItem(storageKey);
     if (savedVote) {
       const data = JSON.parse(savedVote);
       setSelected(data.selected);
-      setVotes(data.votes);
       setShowResult(true);
     } else {
       setSelected(null);
-      setVotes({ A: 0, B: 0 });
       setShowResult(false);
     }
   }, [storageKey]);
 
-  const handleVote = (choice: "A" | "B") => {
+  const handleVote = async (choice: "A" | "B") => {
     if (showResult) return;
 
-    const newVotes = {
-      A: votes.A + (choice === "A" ? 1 : 0),
-      B: votes.B + (choice === "B" ? 1 : 0),
-    };
-
     setSelected(choice);
-    setVotes(newVotes);
 
-    setTimeout(() => {
-      setShowResult(true);
-      localStorage.setItem(
-        storageKey,
-        JSON.stringify({ selected: choice, votes: newVotes })
-      );
-    }, 400);
+    try {
+      // 서버에 투표 전송
+      const res = await fetch("/api/vote", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ choice }),
+      });
+
+      const data = await res.json();
+
+      if (data.success) {
+        // 서버에서 받은 실제 투표 결과 반영
+        setVotes(data.votes);
+
+        setTimeout(() => {
+          setShowResult(true);
+          // 로컬 스토리지에는 내가 선택한 것만 저장 (중복 투표 방지용)
+          localStorage.setItem(storageKey, JSON.stringify({ selected: choice }));
+        }, 400);
+      }
+    } catch (error) {
+      console.error("Failed to vote:", error);
+      alert("투표에 실패했습니다. 다시 시도해주세요.");
+      setSelected(null);
+    }
   };
 
   const total = votes.A + votes.B;

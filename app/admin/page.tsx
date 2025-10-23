@@ -15,6 +15,8 @@ export default function AdminPage() {
     left: { label: "" },
     right: { label: "" },
   });
+  const [resetVotes, setResetVotes] = useState(false);
+  const [currentVotes, setCurrentVotes] = useState({ A: 0, B: 0 });
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -23,6 +25,7 @@ export default function AdminPage() {
       .then((r) => r.json())
       .then((res) => {
         if (res?.data) setConfig(res.data);
+        if (res?.votes) setCurrentVotes(res.votes);
       })
       .catch(() => {});
   }, []);
@@ -38,11 +41,15 @@ export default function AdminPage() {
           "Content-Type": "application/json",
           "x-admin-key": adminKey,
         },
-        body: JSON.stringify(config),
+        body: JSON.stringify({ ...config, resetVotesFlag: resetVotes }),
       });
       const data = await res.json();
       if (data.success) {
         setMessage("저장되었습니다. 메인 페이지를 새로고침하세요.");
+        if (resetVotes) {
+          setCurrentVotes({ A: 0, B: 0 });
+          setResetVotes(false);
+        }
       } else {
         setMessage(data.message || "저장 실패");
       }
@@ -115,6 +122,24 @@ export default function AdminPage() {
               placeholder="이모지 (선택)"
             />
           </div>
+        </div>
+
+        <div className="border-t pt-4">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-sm text-gray-600">현재 투표 현황</span>
+            <span className="text-sm font-semibold">
+              A: {currentVotes.A} | B: {currentVotes.B}
+            </span>
+          </div>
+          <label className="flex items-center gap-2 text-sm text-gray-700">
+            <input
+              type="checkbox"
+              checked={resetVotes}
+              onChange={(e) => setResetVotes(e.target.checked)}
+              className="rounded"
+            />
+            투표 수를 0으로 초기화 (새 질문 등록시 권장)
+          </label>
         </div>
 
         <button

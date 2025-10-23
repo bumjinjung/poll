@@ -1,23 +1,28 @@
 import { NextRequest, NextResponse } from "next/server";
-import { promises as fs } from "fs";
-import path from "path";
+import { getPollData, setPollData, getVoteData, resetVotes } from "@/lib/kv";
 
-const CONFIG_PATH = path.join(process.cwd(), "app", "data", "today.json");
 const ADMIN_KEY = process.env.ADMIN_KEY || "dev-admin"; // 간단한 개발용 키
 
+// 설문 질문 + 투표 결과 조회
 export async function GET() {
   try {
-    const data = await fs.readFile(CONFIG_PATH, "utf-8");
-    const json = JSON.parse(data);
-    return NextResponse.json({ success: true, data: json });
+    const pollData = await getPollData();
+    const voteData = await getVoteData();
+    return NextResponse.json({ 
+      success: true, 
+      data: pollData,
+      votes: voteData
+    });
   } catch (e) {
+    console.error("GET poll error:", e);
     return NextResponse.json(
-      { success: false, message: "설정 파일을 읽지 못했습니다." },
+      { success: false, message: "설정을 읽지 못했습니다." },
       { status: 500 }
     );
   }
 }
 
+// 설문 질문 업데이트 (관리자 전용)
 export async function POST(req: NextRequest) {
   const key = req.headers.get("x-admin-key") || "";
   if (key !== ADMIN_KEY) {
@@ -29,7 +34,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { question, left, right } = body || {};
+    const { question, left, right, resetVotesFlag } = body || {};
 
     if (
       typeof question !== "string" ||
@@ -48,10 +53,16 @@ export async function POST(req: NextRequest) {
       right: { label: right.label.trim(), emoji: right.emoji || "" },
     };
 
-    await fs.writeFile(CONFIG_PATH, JSON.stringify(payload, null, 2), "utf-8");
+    await setPollData(payload);
+
+    // 새 질문 등록시 투표 초기화
+    if (resetVotesFlag) {
+      await resetVotes();
+    }
 
     return NextResponse.json({ success: true, data: payload });
   } catch (e) {
+    console.error("POST poll error:", e);
     return NextResponse.json(
       { success: false, message: "설정을 저장하지 못했습니다." },
       { status: 500 }
