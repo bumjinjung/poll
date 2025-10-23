@@ -367,18 +367,6 @@ export default function AdminPage() {
               />
             </div>
           </div>
-
-          {/* 메시지 */}
-          {message && (
-            <div className={`rounded-lg px-2 text-center text-xs font-medium flex items-center justify-center ${
-              message.includes("실패") || message.includes("오류")
-                ? "bg-red-100 text-red-700"
-                : "bg-green-100 text-green-700"
-            } ${isFadingOut ? 'fade-out' : ''}`} style={{ height: '30px' }}>
-              {message}
-            </div>
-          )}
-
           {/* 버튼 */}
           <div className="flex gap-2 pt-2">
             <button
@@ -418,7 +406,7 @@ export default function AdminPage() {
 
           {/* 오늘/내일 Poll 하단 정보 */}
           {activeTab === "today" ? (
-            <div className="bg-gray-50 rounded-lg px-2 flex items-center justify-between" style={{ height: '30px' }}>
+            <div className="px-2 flex items-center justify-between" style={{ height: '30px' }}>
               <span className="text-xs text-gray-600">투표: A {currentVotes.A} · B {currentVotes.B}</span>
               <label className="flex items-center gap-1 cursor-pointer">
                 <input
@@ -431,8 +419,25 @@ export default function AdminPage() {
               </label>
             </div>
           ) : (
-            <div style={{ height: '30px' }} />
+            <div className="px-2 flex items-center justify-center" style={{ height: '30px' }}>
+              {hasTomorrow ? (
+                <span className="text-xs text-green-600">✓ 예약이 되었습니다</span>
+              ) : (
+                <span className="text-xs text-gray-400">예약이 없습니다</span>
+              )}
+            </div>
           )}
+
+          {/* 메시지 */}
+          <div className={`rounded-lg px-2 text-center text-xs font-medium flex items-center justify-center ${
+            message ? (
+              message.includes("실패") || message.includes("오류")
+                ? "bg-red-100 text-red-700"
+                : "bg-green-100 text-green-700"
+            ) : ""
+          } ${isFadingOut ? 'fade-out' : ''}`} style={{ height: '30px' }}>
+            {message || ""}
+          </div>
         </div>
 
         <style jsx>{`

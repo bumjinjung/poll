@@ -161,23 +161,21 @@ export default function PollClient({
 
   if (!config) {
     return (
-      <div className="h-screen overflow-hidden flex flex-col items-center justify-center p-4 sm:p-6">
-        <div className="w-full max-w-4xl flex flex-col items-center gap-12 sm:gap-16 md:gap-20">
-          <div className="text-center px-4">
-            <h2 className="text-2xl sm:text-3xl md:text-4xl font-semibold text-gray-400">
-              설문조사가 아직 준비되지 않았습니다.
-            </h2>
-            <p className="text-sm text-gray-500 mt-4">
-              관리자 페이지에서 설정해주세요.
-            </p>
-          </div>
+      <div className="min-h-screen flex flex-col items-center justify-center p-4 sm:p-6">
+        <div className="text-center px-4">
+          <h2 className="text-2xl sm:text-3xl md:text-4xl font-semibold text-gray-400">
+            설문조사가 아직 준비되지 않았습니다.
+          </h2>
+          <p className="text-sm text-gray-500 mt-4">
+            관리자 페이지에서 설정해주세요.
+          </p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="h-screen overflow-hidden flex flex-col items-center justify-center p-4 sm:p-6">
+    <div className="min-h-screen flex flex-col items-center justify-center p-4 sm:p-6">
       <div className="w-full max-w-4xl flex flex-col items-center gap-12 sm:gap-16 md:gap-20">
         <div className="text-center px-4">
           <h2 className="text-2xl sm:text-3xl md:text-4xl font-semibold text-gray-800">

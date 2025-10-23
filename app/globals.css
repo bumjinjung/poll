@@ -11,12 +11,30 @@ body {
   width: 100%;
   height: 100%;
   background: linear-gradient(to bottom, #fafafa 0%, #f0f0f0 100%);
-  min-height: 100vh;
-  overscroll-behavior: none;
-  overflow: hidden;
+  /* iOS 주소창 이슈 안전: */
+  min-height: 100dvh;
+  overscroll-behavior: contain; /* none → 스크롤 체이닝만 제어 */
+  overflow-x: hidden;
+  overflow-y: auto;            /* ← 스크롤 허용 */
   color: #1a1a1a;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* 배경이 화면을 넘어가도 계속 유지되도록 */
+html {
+  background: linear-gradient(to bottom, #fafafa 0%, #f0f0f0 100%);
+  background-attachment: fixed;
+  min-height: 100%;
+}
+
+body {
+  background: transparent;
+}
+
+/* 부드러운 스크롤 */
+html {
+  scroll-behavior: smooth;
 }
 
 @keyframes fadeIn {
