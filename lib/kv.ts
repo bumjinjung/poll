@@ -23,6 +23,12 @@ export interface PollHistoryItem {
   votes: VoteData;
 }
 
+export interface UserVoteRecord {
+  question: string;
+  choice: "A" | "B";
+  timestamp: number;
+}
+
 // 설문 질문 가져오기
 export async function getPollData(): Promise<PollData> {
   if (isDev) {
@@ -212,5 +218,38 @@ export async function checkAndPromoteTomorrowPoll(): Promise<boolean> {
   // 내일 poll이 없어도 날짜는 업데이트
   await setLastUpdateDate(today);
   return false;
+}
+
+// ========== 사용자 중복 투표 방지 ==========
+
+// 사용자가 현재 질문에 이미 투표했는지 확인
+export async function checkUserVoted(userHash: string, currentQuestion: string): Promise<boolean> {
+  const key = `vote:user:${userHash}`;
+  
+  if (isDev) {
+    const record = devStore.get(key) as UserVoteRecord | undefined;
+    return record?.question === currentQuestion;
+  }
+  
+  const record = await kv.get<UserVoteRecord>(key);
+  return record?.question === currentQuestion;
+}
+
+// 사용자 투표 기록 저장
+export async function recordUserVote(userHash: string, question: string, choice: "A" | "B"): Promise<void> {
+  const key = `vote:user:${userHash}`;
+  const record: UserVoteRecord = {
+    question,
+    choice,
+    timestamp: Date.now(),
+  };
+  
+  if (isDev) {
+    devStore.set(key, record);
+    return;
+  }
+  
+  // KV에 저장 (질문이 바뀌면 자동으로 덮어씌워짐)
+  await kv.set(key, record);
 }
 

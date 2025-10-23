@@ -96,6 +96,10 @@ export default function PollClient({
           setShowResult(true);
           localStorage.setItem(storageKey, JSON.stringify({ selected: choice }));
         }, 400);
+      } else {
+        // 서버에서 중복 투표 감지
+        alert(data.message || "투표에 실패했습니다.");
+        setSelected(null);
       }
     } catch {
       alert("투표에 실패했습니다. 다시 시도해주세요.");
