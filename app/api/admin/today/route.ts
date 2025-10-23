@@ -12,23 +12,20 @@ import {
 
 const ADMIN_KEY = process.env.ADMIN_KEY
 
-// 설문 질문 + 투표 결과 + 내일 poll 조회 (관리자 전용)
+// 설문 질문 + 투표 결과 + 내일 poll 조회
+// GET은 공개, 내일 poll 조회는 관리자 전용
 export async function GET(req: NextRequest) {
-  const key = req.headers.get("x-admin-key") || "";
-  if (key !== ADMIN_KEY) {
-    return NextResponse.json(
-      { success: false, message: "권한이 없습니다." },
-      { status: 401 }
-    );
-  }
-
   try {
     // 날짜 체크하여 자동 전환
     await checkAndPromoteTomorrowPoll();
 
     const pollData = await getPollData();
     const voteData = await getVoteData();
-    const tomorrowData = await getTomorrowPoll();
+    
+    // 관리자 인증이 있으면 내일 poll도 반환
+    const key = req.headers.get("x-admin-key") || "";
+    const isAdmin = key === ADMIN_KEY;
+    const tomorrowData = isAdmin ? await getTomorrowPoll() : null;
     
     return NextResponse.json({ 
       success: true, 
