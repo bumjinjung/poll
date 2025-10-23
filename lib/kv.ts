@@ -23,18 +23,18 @@ export async function getPollData(): Promise<PollData> {
     const data = devStore.get("poll:today");
     return (
       data || {
-        question: "이성친구 가능 VS 불가능",
-        left: { label: "가능", emoji: "🙆" },
-        right: { label: "불가능", emoji: "🙅" },
+        question: "커피 vs 차",
+        left: { label: "커피", emoji: "☕" },
+        right: { label: "차", emoji: "🍵" },
       }
     );
   }
   const data = await kv.get<PollData>("poll:today");
   return (
     data || {
-      question: "이성친구 가능 VS 불가능",
-      left: { label: "가능", emoji: "🙆" },
-      right: { label: "불가능", emoji: "🙅" },
+      question: "커피 vs 차",
+      left: { label: "커피", emoji: "☕" },
+      right: { label: "차", emoji: "🍵" },
     }
   );
 }

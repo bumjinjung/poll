@@ -12,10 +12,11 @@ export default function Home() {
   const [selected, setSelected] = useState<"A" | "B" | null>(null);
   const [votes, setVotes] = useState({ A: 0, B: 0 });
   const [showResult, setShowResult] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [config, setConfig] = useState<TwoChoicePollConfig>({
-    question: "민초 vs 반민초",
-    left: { label: "민초", emoji: "🍦" },
-    right: { label: "반민초", emoji: "🙅" },
+    question: "로딩 중...",
+    left: { label: "...", emoji: "⏳" },
+    right: { label: "...", emoji: "⏳" },
   });
 
   // 질문별로 로컬 스토리지 키를 분리(질문이 바뀌면 신규 투표로 취급)
@@ -48,6 +49,8 @@ export default function Home() {
       }
     } catch (error) {
       console.error("Failed to fetch poll data:", error);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -112,6 +115,17 @@ export default function Home() {
   const total = votes.A + votes.B;
   const percentA = total > 0 ? Math.round((votes.A / total) * 100) : 50;
   const percentB = total > 0 ? Math.round((votes.B / total) * 100) : 50;
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="text-6xl mb-4">⏳</div>
+          <p className="text-lg text-gray-600">로딩 중...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-6">

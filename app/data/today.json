@@ -1,11 +1,11 @@
 {
-  "question": "이성친구 가능 VS 불가능",
+  "question": "커피 vs 차",
   "left": {
-    "label": "가능",
-    "emoji": "🙆"
+    "label": "커피",
+    "emoji": "☕"
   },
   "right": {
-    "label": "불가능",
-    "emoji": "🙅"
+    "label": "차",
+    "emoji": "🍵"
   }
 }
