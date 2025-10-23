@@ -10,7 +10,7 @@ import {
   checkAndPromoteTomorrowPoll
 } from "@/lib/kv";
 
-const ADMIN_KEY = process.env.ADMIN_KEY || "dev-admin"; // 간단한 개발용 키
+const ADMIN_KEY = process.env.ADMIN_KEY
 
 // 설문 질문 + 투표 결과 + 내일 poll 조회 (관리자 전용)
 export async function GET(req: NextRequest) {
