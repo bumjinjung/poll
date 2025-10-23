@@ -108,8 +108,8 @@ export default function PollClient({
   const percentB = total > 0 ? Math.round((votes.B / total) * 100) : 50;
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center p-4 sm:p-6">
-      <div className="w-full max-w-4xl flex flex-col items-center gap-12 sm:gap-16 md:gap-20">
+    <div className="h-dvh overflow-hidden flex flex-col items-center justify-center p-3 sm:p-6">
+      <div className="w-full max-w-4xl flex flex-col items-center gap-8 sm:gap-12 md:gap-16">
         <div className="text-center px-4">
           <h2 className="text-2xl sm:text-3xl md:text-4xl font-semibold text-gray-800">
             {config.question}
@@ -121,7 +121,7 @@ export default function PollClient({
             onClick={() => handleVote("A")}
             disabled={showResult}
             className={`
-              group relative w-36 h-36 sm:w-44 sm:h-44 md:w-52 md:h-52 rounded-[1.5rem] sm:rounded-[2rem] overflow-hidden
+              group relative w-32 h-32 sm:w-44 sm:h-44 md:w-52 md:h-52 rounded-[1.5rem] sm:rounded-[2rem] overflow-hidden
               transition-all duration-300 ease-out
               ${showResult ? "cursor-default" : "cursor-pointer hover:scale-[1.02]"}
               ${selected === "A" ? "shadow-2xl shadow-blue-200/50" : "shadow-lg hover:shadow-xl"}
@@ -157,7 +157,7 @@ export default function PollClient({
             onClick={() => handleVote("B")}
             disabled={showResult}
             className={`
-              group relative w-36 h-36 sm:w-44 sm:h-44 md:w-52 md:h-52 rounded-[1.5rem] sm:rounded-[2rem] overflow-hidden
+              group relative w-32 h-32 sm:w-44 sm:h-44 md:w-52 md:h-52 rounded-[1.5rem] sm:rounded-[2rem] overflow-hidden
               transition-all duration-300 ease-out
               ${showResult ? "cursor-default" : "cursor-pointer hover:scale-[1.02]"}
               ${selected === "B" ? "shadow-2xl shadow-purple-200/50" : "shadow-lg hover:shadow-xl"}
