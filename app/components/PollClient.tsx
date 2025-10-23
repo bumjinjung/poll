@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 
 type TwoChoicePollConfig = {
   question: string;
@@ -70,6 +71,14 @@ export default function PollClient({
           setShowResult(false);
           const newStorageKey = `poll-voted-${data.data.question}`;
           localStorage.removeItem(newStorageKey);
+        } else if (data?.data) {
+          // 설문이 같으면 기존 투표 상태 확인
+          const savedVote = localStorage.getItem(storageKey);
+          if (savedVote) {
+            const { selected } = JSON.parse(savedVote);
+            setSelected(selected);
+            setShowResult(true);
+          }
         }
       } catch {}
     };
@@ -88,6 +97,14 @@ export default function PollClient({
           // 새 설문이므로 로컬 스토리지에서도 해당 기록 제거
           const newStorageKey = `poll-voted-${data.data.question}`;
           localStorage.removeItem(newStorageKey);
+        } else if (data?.data) {
+          // 설문이 같으면 기존 투표 상태 확인
+          const savedVote = localStorage.getItem(storageKey);
+          if (savedVote) {
+            const { selected } = JSON.parse(savedVote);
+            setSelected(selected);
+            setShowResult(true);
+          }
         }
       } catch {}
     }, 2000);
@@ -248,6 +265,12 @@ export default function PollClient({
 
         <div className={`text-center ${!showResult || !synced ? "invisible" : ""}`}>
           <p className="text-sm text-gray-400">총 {total.toLocaleString()}명 참여</p>
+          <Link 
+            href="/history" 
+            className="inline-block mt-2 text-xs text-gray-400 hover:text-gray-600 transition-colors"
+          >
+            이전 설문 결과 보기
+          </Link>
         </div>
       </div>
     </div>
