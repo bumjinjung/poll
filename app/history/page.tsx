@@ -1,9 +1,11 @@
 import Link from "next/link";
-import { pollsData } from "@/app/data/polls";
+import { getPollHistory } from "@/lib/kv";
 
-export default function HistoryPage() {
+export default async function HistoryPage() {
+  // 저장된 히스토리 불러오기
+  const history = await getPollHistory();
   // 역순으로 정렬 (최신순)
-  const sortedPolls = [...pollsData].reverse();
+  const sortedPolls = [...history].reverse();
 
   return (
     <div className="flex flex-col items-center justify-start min-h-screen py-12 px-4">
@@ -18,14 +20,17 @@ export default function HistoryPage() {
       {/* 헤더 */}
       <div className="mb-12 text-center w-full">
         <h1 className="text-4xl font-bold text-gray-800 mb-4">히스토리</h1>
-        <p className="text-gray-500 text-sm">총 {pollsData.length}개의 설문조사</p>
+        <p className="text-gray-500 text-sm">총 {sortedPolls.length}개의 설문조사</p>
       </div>
 
       {/* 설문조사 히스토리 */}
       <div className="w-full max-w-3xl space-y-4">
-        {sortedPolls.map((poll) => {
-          const totalVotes = poll.options.reduce((sum, opt) => sum + opt.votes, 0);
-          const formattedDate = new Date(poll.date).toLocaleDateString("ko-KR", {
+        {sortedPolls.map((item) => {
+          const poll = item.poll;
+          if (!poll) return null;
+          
+          const totalVotes = poll.optionA.votes + poll.optionB.votes;
+          const formattedDate = new Date(item.timestamp).toLocaleDateString("ko-KR", {
             year: "numeric",
             month: "short",
             day: "numeric",
@@ -33,7 +38,7 @@ export default function HistoryPage() {
 
           return (
             <div
-              key={poll.id}
+              key={item.timestamp}
               className="p-6 bg-white rounded-2xl shadow-sm hover:shadow-md transition-shadow"
             >
               <div className="flex items-start justify-between mb-4">
@@ -50,11 +55,14 @@ export default function HistoryPage() {
               </div>
 
               <div className="space-y-3">
-                {poll.options.map((option) => {
+                {[
+                  { text: poll.optionA.text, votes: poll.optionA.votes },
+                  { text: poll.optionB.text, votes: poll.optionB.votes }
+                ].map((option, idx) => {
                   const percentage =
                     totalVotes > 0 ? (option.votes / totalVotes) * 100 : 0;
                   return (
-                    <div key={option.id} className="flex items-center gap-4">
+                    <div key={idx} className="flex items-center gap-4">
                       <div className="flex-1">
                         <div className="flex items-center justify-between mb-1">
                           <span className="text-sm text-gray-700">{option.text}</span>
