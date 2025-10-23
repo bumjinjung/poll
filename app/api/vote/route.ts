@@ -30,6 +30,12 @@ export async function POST(req: Request) {
 
     // 현재 질문 가져오기
     const currentPoll = await getPollData();
+    if (!currentPoll) {
+      return NextResponse.json(
+        { success: false, message: "설문조사가 준비되지 않았습니다" },
+        { status: 404 }
+      );
+    }
     const currentQuestion = currentPoll.question;
 
     // 이미 투표했는지 확인
