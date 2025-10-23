@@ -14,18 +14,18 @@ export default function PollClient({
   initialConfig,
   initialVotes,
 }: {
-  initialConfig: TwoChoicePollConfig;
+  initialConfig: TwoChoicePollConfig | null;
   initialVotes: VoteData;
 }) {
-  const [config, setConfig] = useState<TwoChoicePollConfig>(initialConfig);
+  const [config, setConfig] = useState<TwoChoicePollConfig | null>(initialConfig);
   const [votes, setVotes] = useState<VoteData>(initialVotes);
   const [selected, setSelected] = useState<"A" | "B" | null>(null);
   const [showResult, setShowResult] = useState(false);
   const [synced, setSynced] = useState(false);
 
   const storageKey = useMemo(
-    () => `poll-voted-${config.question}`,
-    [config.question]
+    () => `poll-voted-${config?.question || ""}`,
+    [config?.question]
   );
 
   useEffect(() => {
@@ -55,10 +55,45 @@ export default function PollClient({
     return () => clearInterval(id);
   }, [showResult]);
 
-  // 마운트 즉시 한 번 최신 투표 수를 가져와 SSR과의 차이를 없앰
   useEffect(() => {
+    // 마운트 즉시 한 번 최신 투표 수를 가져와 SSR과의 차이를 없앰
     fetchVotes();
+    
+    // 마운트 직후 즉시 최신 설문 데이터 확인 (이전 내용 표시 방지)
+    const checkLatestConfig = async () => {
+      try {
+        const res = await fetch("/api/admin/today", { cache: "no-store" });
+        const data = await res.json();
+        if (data?.data && JSON.stringify(data.data) !== JSON.stringify(config)) {
+          setConfig(data.data);
+          setSelected(null);
+          setShowResult(false);
+          const newStorageKey = `poll-voted-${data.data.question}`;
+          localStorage.removeItem(newStorageKey);
+        }
+      } catch {}
+    };
+    checkLatestConfig();
+    
+    // 매 2초마다 설문 데이터 갱신 확인
+    const configCheckInterval = setInterval(async () => {
+      try {
+        const res = await fetch("/api/admin/today", { cache: "no-store" });
+        const data = await res.json();
+        if (data?.data && JSON.stringify(data.data) !== JSON.stringify(config)) {
+          // 설문이 바뀌면 즉시 갱신
+          setConfig(data.data);
+          setSelected(null);
+          setShowResult(false);
+          // 새 설문이므로 로컬 스토리지에서도 해당 기록 제거
+          const newStorageKey = `poll-voted-${data.data.question}`;
+          localStorage.removeItem(newStorageKey);
+        }
+      } catch {}
+    }, 2000);
+    
     // eslint-disable-next-line react-hooks/exhaustive-deps
+    return () => clearInterval(configCheckInterval);
   }, []);
 
   // 저장된 투표로 결과 표시 전환되면 즉시 최신값으로 동기화
@@ -110,6 +145,23 @@ export default function PollClient({
   const total = votes.A + votes.B;
   const percentA = total > 0 ? Math.round((votes.A / total) * 100) : 50;
   const percentB = total > 0 ? Math.round((votes.B / total) * 100) : 50;
+
+  if (!config) {
+    return (
+      <div className="h-screen overflow-hidden flex flex-col items-center justify-center p-4 sm:p-6">
+        <div className="w-full max-w-4xl flex flex-col items-center gap-12 sm:gap-16 md:gap-20">
+          <div className="text-center px-4">
+            <h2 className="text-2xl sm:text-3xl md:text-4xl font-semibold text-gray-400">
+              설문조사가 아직 준비되지 않았습니다.
+            </h2>
+            <p className="text-sm text-gray-500 mt-4">
+              관리자 페이지에서 설정해주세요.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="h-screen overflow-hidden flex flex-col items-center justify-center p-4 sm:p-6">

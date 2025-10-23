@@ -1,10 +1,50 @@
 import { kv } from "@vercel/kv";
+import fs from "fs";
+import path from "path";
 
 // 개발 환경에서는 메모리 저장소 사용
 const isDev = process.env.NODE_ENV === "development";
 
 // 개발용 메모리 저장소
 const devStore = new Map<string, any>();
+
+// 개발 환경 데이터 파일 경로
+const DEV_DATA_FILE = path.join(process.cwd(), ".dev-data.json");
+
+// 개발 데이터 로드
+function loadDevData() {
+  try {
+    if (fs.existsSync(DEV_DATA_FILE)) {
+      const data = fs.readFileSync(DEV_DATA_FILE, "utf-8");
+      const parsed = JSON.parse(data);
+      Object.entries(parsed).forEach(([key, value]) => {
+        devStore.set(key, value);
+      });
+    }
+    // 파일이 없으면 빈 상태로 시작
+  } catch (error) {
+    console.error("Failed to load dev data:", error);
+  }
+}
+
+// 개발 데이터 저장
+function saveDevData() {
+  if (!isDev) return;
+  try {
+    const data: Record<string, any> = {};
+    devStore.forEach((value, key) => {
+      data[key] = value;
+    });
+    fs.writeFileSync(DEV_DATA_FILE, JSON.stringify(data, null, 2));
+  } catch (error) {
+    console.error("Failed to save dev data:", error);
+  }
+}
+
+// 앱 시작 시 데이터 로드
+if (isDev) {
+  loadDevData();
+}
 
 export interface PollData {
   question: string;
@@ -19,7 +59,7 @@ export interface VoteData {
 
 export interface PollHistoryItem {
   date: string; // YYYY-MM-DD (UTC 기준 현재 로직과 동일)
-  poll: PollData;
+  poll: PollData | null;
   votes: VoteData;
 }
 
@@ -30,31 +70,19 @@ export interface UserVoteRecord {
 }
 
 // 설문 질문 가져오기
-export async function getPollData(): Promise<PollData> {
+export async function getPollData(): Promise<PollData | null> {
   if (isDev) {
-    const data = devStore.get("poll:today");
-    return (
-      data || {
-        question: "커피 vs 차",
-        left: { label: "커피", emoji: "☕" },
-        right: { label: "차", emoji: "🍵" },
-      }
-    );
+    return devStore.get("poll:today") || null;
   }
   const data = await kv.get<PollData>("poll:today");
-  return (
-    data || {
-      question: "커피 vs 차",
-      left: { label: "커피", emoji: "☕" },
-      right: { label: "차", emoji: "🍵" },
-    }
-  );
+  return data || null;
 }
 
 // 설문 질문 저장
 export async function setPollData(data: PollData): Promise<void> {
   if (isDev) {
     devStore.set("poll:today", data);
+    saveDevData();
     return;
   }
   await kv.set("poll:today", data);
@@ -83,6 +111,7 @@ export async function addVote(choice: "A" | "B"): Promise<VoteData> {
       B: choice === "B" ? current.B + 1 : current.B,
     };
     devStore.set("poll:votes", updated);
+    saveDevData();
     return updated;
   }
 
@@ -100,6 +129,7 @@ export async function addVote(choice: "A" | "B"): Promise<VoteData> {
 export async function resetVotes(): Promise<void> {
   if (isDev) {
     devStore.set("poll:votes", { A: 0, B: 0 });
+    saveDevData();
     return;
   }
   await kv.set("poll:votes:A", 0);
@@ -120,6 +150,7 @@ export async function getTomorrowPoll(): Promise<PollData | null> {
 export async function setTomorrowPoll(data: PollData): Promise<void> {
   if (isDev) {
     devStore.set("poll:tomorrow", data);
+    saveDevData();
     return;
   }
   await kv.set("poll:tomorrow", data);
@@ -129,6 +160,7 @@ export async function setTomorrowPoll(data: PollData): Promise<void> {
 export async function deleteTomorrowPoll(): Promise<void> {
   if (isDev) {
     devStore.delete("poll:tomorrow");
+    saveDevData();
     return;
   }
   await kv.del("poll:tomorrow");
@@ -145,6 +177,7 @@ export async function getLastUpdateDate(): Promise<string | null> {
 export async function setLastUpdateDate(date: string): Promise<void> {
   if (isDev) {
     devStore.set("poll:last_update", date);
+    saveDevData();
     return;
   }
   await kv.set("poll:last_update", date);
@@ -169,8 +202,10 @@ export async function saveHistorySnapshot(date?: string): Promise<boolean> {
     if (devStore.get(historyKey)) return false;
     const poll = await getPollData();
     const votes = await getVoteData();
+    if (!poll) return false; // 설문이 없으면 저장 안 함
     const item: PollHistoryItem = { date: dateKey, poll, votes };
     devStore.set(historyKey, item);
+    saveDevData();
     return true;
   }
 
@@ -178,6 +213,7 @@ export async function saveHistorySnapshot(date?: string): Promise<boolean> {
   if (exists) return false;
   const poll = await getPollData();
   const votes = await getVoteData();
+  if (!poll) return false; // 설문이 없으면 저장 안 함
   const item: PollHistoryItem = { date: dateKey, poll, votes };
   await kv.set(historyKey, item);
   return true;
@@ -246,6 +282,7 @@ export async function recordUserVote(userHash: string, question: string, choice:
   
   if (isDev) {
     devStore.set(key, record);
+    saveDevData();
     return;
   }
   

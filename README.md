@@ -13,30 +13,42 @@
 
 ## 🚀 시작하기
 
-### 필수 요구사항
-- Node.js 18.0 이상
+### 1. 환경 준비
+
+- Node.js ≥ v18.x  
 - npm 또는 yarn
 
-### 설치
+### 2. 저장소 클론 및 설치
 
-1. **저장소 클론 (또는 프로젝트 폴더 진입)**
 ```bash
+git clone https://github.com/username/poll.git
 cd poll
-```
-
-2. **의존성 설치**
-```bash
 npm install
+# 또는
+# yarn install
 ```
 
-3. **개발 서버 시작**
+### 3. 개발 서버 실행
+
 ```bash
 npm run dev
+# 또는
+# yarn dev
 ```
 
-4. **브라우저에서 확인**
-```
-http://localhost:3000
+브라우저에서 [http://localhost:3000](http://localhost:3000) 접속
+
+### ⚙️ 로컬 개발 환경 데이터
+
+개발 모드에서는 자동으로 `.dev-data.json` 파일을 생성하여 로컬 데이터를 관리합니다:
+
+- **초기 데이터**: 앱 첫 실행 시 자동으로 기본값 로드
+- **자동 저장**: 투표, 설정 변경 시 즉시 파일에 저장
+- **데이터 초기화**: `npm run dev:reset` 명령으로 초기 상태로 리셋 가능
+
+```bash
+# 개발 데이터 초기화 후 재시작
+npm run dev:reset
 ```
 
 ## 📁 프로젝트 구조
