@@ -183,8 +183,16 @@ export async function setLastUpdateDate(date: string): Promise<void> {
   await kv.set("poll:last_update", date);
 }
 
+// 한국 시간(KST) 기준 날짜 가져오기
+function getKSTDate(): string {
+  const now = new Date();
+  const kstOffset = 9 * 60; // KST는 UTC+9
+  const kstTime = new Date(now.getTime() + kstOffset * 60 * 1000);
+  return kstTime.toISOString().split("T")[0]; // YYYY-MM-DD
+}
+
 function getTodayDate(): string {
-  return new Date().toISOString().split("T")[0];
+  return getKSTDate();
 }
 
 function getYesterdayDate(today: string): string {
@@ -258,7 +266,7 @@ export async function getPollHistory(): Promise<PollHistoryItem[]> {
 
 // 자정에 자동으로 내일 poll을 오늘 poll로 전환
 export async function checkAndPromoteTomorrowPoll(): Promise<boolean> {
-  const today = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
+  const today = getKSTDate(); // 한국 시간 기준
   const lastUpdate = await getLastUpdateDate();
 
   // 이미 오늘 업데이트했으면 스킵
