@@ -31,15 +31,6 @@ export async function GET(req: NextRequest) {
     
     // 관리자 인증이 있으면 내일 poll도 반환
     const key = req.headers.get("x-admin-key") || "";
-    // 디버깅: 배포 환경에서 어떤 값이 비교되는지 앞 3글자만 로깅
-    try {
-      const rx = (s: string) => (s ? s.substring(0, 3) + "..." : "<empty>");
-      console.log(
-        "[AUTH GET] received:", rx(key),
-        "expected:", rx(String(ADMIN_KEY)),
-        "match:", key === ADMIN_KEY
-      );
-    } catch {}
     const isAdmin = key === ADMIN_KEY;
     const tomorrowData = isAdmin ? await getTomorrowPoll() : null;
     
