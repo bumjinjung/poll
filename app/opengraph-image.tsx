@@ -36,14 +36,30 @@ export default async function Image() {
           {/* 메인 타이틀 */}
           <div
             style={{
-              fontSize: 72,
-              fontWeight: 'bold',
-              color: 'white',
-              textAlign: 'center',
-              lineHeight: 1.3,
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: 10,
             }}
           >
-            매일 하나씩<br />가벼운 설문조사
+            <div
+              style={{
+                fontSize: 72,
+                fontWeight: 'bold',
+                color: 'white',
+              }}
+            >
+              매일 하나씩
+            </div>
+            <div
+              style={{
+                fontSize: 72,
+                fontWeight: 'bold',
+                color: 'white',
+              }}
+            >
+              가벼운 설문조사
+            </div>
           </div>
 
           {/* 데코레이션 */}
