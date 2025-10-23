@@ -71,14 +71,6 @@ export default function PollClient({
           setShowResult(false);
           const newStorageKey = `poll-voted-${data.data.question}`;
           localStorage.removeItem(newStorageKey);
-        } else if (data?.data) {
-          // 설문이 같으면 기존 투표 상태 확인
-          const savedVote = localStorage.getItem(storageKey);
-          if (savedVote) {
-            const { selected } = JSON.parse(savedVote);
-            setSelected(selected);
-            setShowResult(true);
-          }
         }
       } catch {}
     };
@@ -97,14 +89,6 @@ export default function PollClient({
           // 새 설문이므로 로컬 스토리지에서도 해당 기록 제거
           const newStorageKey = `poll-voted-${data.data.question}`;
           localStorage.removeItem(newStorageKey);
-        } else if (data?.data) {
-          // 설문이 같으면 기존 투표 상태 확인
-          const savedVote = localStorage.getItem(storageKey);
-          if (savedVote) {
-            const { selected } = JSON.parse(savedVote);
-            setSelected(selected);
-            setShowResult(true);
-          }
         }
       } catch {}
     }, 2000);
@@ -119,6 +103,18 @@ export default function PollClient({
       fetchVotes();
     }
   }, [showResult, storageKey]);
+
+  // config가 변경되면 storageKey도 업데이트하고 기존 투표 상태 확인
+  useEffect(() => {
+    if (config) {
+      const savedVote = localStorage.getItem(storageKey);
+      if (savedVote) {
+        const { selected } = JSON.parse(savedVote);
+        setSelected(selected);
+        setShowResult(true);
+      }
+    }
+  }, [config, storageKey]);
 
   const fetchVotes = async () => {
     try {
