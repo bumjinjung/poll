@@ -12,10 +12,17 @@ import {
 
 const ADMIN_KEY = process.env.ADMIN_KEY
 
+function ensureAdminKeyConfigured() {
+  if (!ADMIN_KEY) {
+    throw new Error("ADMIN_KEY is not configured in environment");
+  }
+}
+
 // 설문 질문 + 투표 결과 + 내일 poll 조회
 // GET은 공개, 내일 poll 조회는 관리자 전용
 export async function GET(req: NextRequest) {
   try {
+    ensureAdminKeyConfigured();
     // 날짜 체크하여 자동 전환
     await checkAndPromoteTomorrowPoll();
 
@@ -45,6 +52,12 @@ export async function GET(req: NextRequest) {
 
 // 설문 질문 업데이트 (관리자 전용)
 export async function POST(req: NextRequest) {
+  try { ensureAdminKeyConfigured(); } catch (e) {
+    return NextResponse.json(
+      { success: false, message: "서버 설정 오류: ADMIN_KEY 미설정" },
+      { status: 500 }
+    );
+  }
   const key = req.headers.get("x-admin-key") || "";
   if (key !== ADMIN_KEY) {
     return NextResponse.json(
