@@ -42,6 +42,10 @@ export default function PollClient({
   }, [storageKey]);
 
   useEffect(() => {
+    // 첫 로드에 한 번 즉시 갱신 (결과 표시 중이면)
+    if (showResult) {
+      fetchVotes();
+    }
     const id = setInterval(() => {
       if (showResult) {
         fetchVotes();
@@ -49,6 +53,19 @@ export default function PollClient({
     }, 5000);
     return () => clearInterval(id);
   }, [showResult]);
+
+  // 마운트 즉시 한 번 최신 투표 수를 가져와 SSR과의 차이를 없앰
+  useEffect(() => {
+    fetchVotes();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // 저장된 투표로 결과 표시 전환되면 즉시 최신값으로 동기화
+  useEffect(() => {
+    if (showResult) {
+      fetchVotes();
+    }
+  }, [showResult, storageKey]);
 
   const fetchVotes = async () => {
     try {
