@@ -1,5 +1,5 @@
 // app/api/history/route.ts (Node.js Runtime + 캐시 헤더)
-// export const runtime = "edge"; // Edge Runtime은 Node.js 모듈을 지원하지 않음
+export const runtime = "nodejs"; // Node.js Runtime 사용
 
 import { NextResponse } from "next/server";
 import { fetchHistoryPage } from "@/lib/data";

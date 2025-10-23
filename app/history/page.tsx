@@ -13,11 +13,11 @@ export default async function HistoryPage() {
   return (
     <div className="flex flex-col items-center min-h-dvh px-4 pb-4 sm:px-6 sm:pb-6" style={{ marginLeft: 20, marginRight: 20, marginTop: '30px' }}>
       <div className="w-full max-w-4xl flex flex-col items-center justify-center min-h-screen">
-        {/* 헤더/상단 즉시 렌더 */}
-        <Header itemsCountHint={items.length} />
-        
         {/* 히스토리 목록 */}
         <div className="w-full max-w-3xl space-y-6">
+          {/* 헤더/상단 즉시 렌더 */}
+          <Header />
+          
           {/* 초기 1페이지는 SSR로 이미 DOM */}
           <HistoryListSSR items={items} />
           {/* 이후 페이지는 클라에서 무한스크롤로 이어붙임 */}
