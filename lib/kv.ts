@@ -54,8 +54,12 @@ export async function getVoteData(): Promise<VoteData> {
     const data = devStore.get("poll:votes");
     return data || { A: 0, B: 0 };
   }
-  const data = await kv.get<VoteData>("poll:votes");
-  return data || { A: 0, B: 0 };
+  
+  // Vercel KV에서는 A와 B를 따로 저장하므로 따로 조회
+  const A = (await kv.get<number>("poll:votes:A")) || 0;
+  const B = (await kv.get<number>("poll:votes:B")) || 0;
+  
+  return { A, B };
 }
 
 // 투표 추가 (원자적 연산)
