@@ -94,3 +94,72 @@ export async function resetVotes(): Promise<void> {
   await kv.set("poll:votes:B", 0);
 }
 
+// ========== 내일 Poll 관련 함수 ==========
+
+// 내일 poll 가져오기
+export async function getTomorrowPoll(): Promise<PollData | null> {
+  if (isDev) {
+    return devStore.get("poll:tomorrow") || null;
+  }
+  return (await kv.get<PollData>("poll:tomorrow")) || null;
+}
+
+// 내일 poll 저장
+export async function setTomorrowPoll(data: PollData): Promise<void> {
+  if (isDev) {
+    devStore.set("poll:tomorrow", data);
+    return;
+  }
+  await kv.set("poll:tomorrow", data);
+}
+
+// 내일 poll 삭제
+export async function deleteTomorrowPoll(): Promise<void> {
+  if (isDev) {
+    devStore.delete("poll:tomorrow");
+    return;
+  }
+  await kv.del("poll:tomorrow");
+}
+
+// 마지막 업데이트 날짜 저장/조회
+export async function getLastUpdateDate(): Promise<string | null> {
+  if (isDev) {
+    return devStore.get("poll:last_update") || null;
+  }
+  return (await kv.get<string>("poll:last_update")) || null;
+}
+
+export async function setLastUpdateDate(date: string): Promise<void> {
+  if (isDev) {
+    devStore.set("poll:last_update", date);
+    return;
+  }
+  await kv.set("poll:last_update", date);
+}
+
+// 자정에 자동으로 내일 poll을 오늘 poll로 전환
+export async function checkAndPromoteTomorrowPoll(): Promise<boolean> {
+  const today = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
+  const lastUpdate = await getLastUpdateDate();
+
+  // 이미 오늘 업데이트했으면 스킵
+  if (lastUpdate === today) {
+    return false;
+  }
+
+  // 내일 poll이 있으면 오늘 poll로 승격
+  const tomorrowPoll = await getTomorrowPoll();
+  if (tomorrowPoll) {
+    await setPollData(tomorrowPoll);
+    await deleteTomorrowPoll();
+    await resetVotes();
+    await setLastUpdateDate(today);
+    return true;
+  }
+
+  // 내일 poll이 없어도 날짜는 업데이트
+  await setLastUpdateDate(today);
+  return false;
+}
+

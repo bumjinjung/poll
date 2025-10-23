@@ -12,11 +12,18 @@ export default function AdminPage() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [inputKey, setInputKey] = useState("");
   const [adminKey, setAdminKey] = useState("");
-  const [config, setConfig] = useState<Config>({
+  const [activeTab, setActiveTab] = useState<"today" | "tomorrow">("today");
+  const [todayConfig, setTodayConfig] = useState<Config>({
     question: "",
     left: { label: "" },
     right: { label: "" },
   });
+  const [tomorrowConfig, setTomorrowConfig] = useState<Config>({
+    question: "",
+    left: { label: "" },
+    right: { label: "" },
+  });
+  const [hasTomorrow, setHasTomorrow] = useState(false);
   const [resetVotes, setResetVotes] = useState(false);
   const [currentVotes, setCurrentVotes] = useState({ A: 0, B: 0 });
   const [saving, setSaving] = useState(false);
@@ -25,15 +32,25 @@ export default function AdminPage() {
 
   useEffect(() => {
     if (isAuthenticated) {
-      fetch("/api/admin/today", { cache: "no-store" })
-        .then((r) => r.json())
-        .then((res) => {
-          if (res?.data) setConfig(res.data);
-          if (res?.votes) setCurrentVotes(res.votes);
-        })
-        .catch(() => {});
+      fetchData();
     }
   }, [isAuthenticated]);
+
+  const fetchData = () => {
+    fetch("/api/admin/today", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((res) => {
+        if (res?.data) setTodayConfig(res.data);
+        if (res?.votes) setCurrentVotes(res.votes);
+        if (res?.tomorrow) {
+          setTomorrowConfig(res.tomorrow);
+          setHasTomorrow(true);
+        } else {
+          setHasTomorrow(false);
+        }
+      })
+      .catch(() => {});
+  };
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
@@ -53,6 +70,10 @@ export default function AdminPage() {
     e.preventDefault();
     setSaving(true);
     setMessage(null);
+    
+    const config = activeTab === "today" ? todayConfig : tomorrowConfig;
+    const isTomorrow = activeTab === "tomorrow";
+    
     try {
       const res = await fetch("/api/admin/today", {
         method: "POST",
@@ -60,17 +81,57 @@ export default function AdminPage() {
           "Content-Type": "application/json",
           "x-admin-key": adminKey,
         },
-        body: JSON.stringify({ ...config, resetVotesFlag: resetVotes }),
+        body: JSON.stringify({ 
+          ...config, 
+          resetVotesFlag: isTomorrow ? false : resetVotes,
+          isTomorrow
+        }),
       });
       const data = await res.json();
       if (data.success) {
-        setMessage("저장되었습니다. 메인 페이지를 새로고침하세요.");
-        if (resetVotes) {
-          setCurrentVotes({ A: 0, B: 0 });
-          setResetVotes(false);
+        if (isTomorrow) {
+          setMessage("내일 poll이 저장되었습니다. 자정에 자동으로 적용됩니다.");
+          setHasTomorrow(true);
+        } else {
+          setMessage("저장되었습니다. 메인 페이지를 새로고침하세요.");
+          if (resetVotes) {
+            setCurrentVotes({ A: 0, B: 0 });
+            setResetVotes(false);
+          }
         }
+        fetchData();
       } else {
         setMessage(data.message || "저장 실패");
+      }
+    } catch (err) {
+      setMessage("오류가 발생했습니다.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDeleteTomorrow = async () => {
+    if (!confirm("내일 poll을 삭제하시겠습니까?")) return;
+    
+    setSaving(true);
+    setMessage(null);
+    try {
+      const res = await fetch("/api/admin/today", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-admin-key": adminKey,
+        },
+        body: JSON.stringify({ deleteTomorrow: true }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setMessage("내일 poll이 삭제되었습니다.");
+        setHasTomorrow(false);
+        setTomorrowConfig({ question: "", left: { label: "" }, right: { label: "" } });
+        fetchData();
+      } else {
+        setMessage(data.message || "삭제 실패");
       }
     } catch (err) {
       setMessage("오류가 발생했습니다.");
@@ -118,6 +179,9 @@ export default function AdminPage() {
     );
   }
 
+  const config = activeTab === "today" ? todayConfig : tomorrowConfig;
+  const setConfig = activeTab === "today" ? setTodayConfig : setTomorrowConfig;
+
   return (
     <div className="min-h-screen flex items-center justify-center p-6">
       <form
@@ -125,7 +189,7 @@ export default function AdminPage() {
         className="w-full max-w-xl space-y-6 bg-white rounded-2xl p-6 shadow"
       >
         <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-semibold">오늘의 2지선다 설정</h1>
+          <h1 className="text-2xl font-semibold">2지선다 Poll 관리</h1>
           <button
             type="button"
             onClick={() => {
@@ -136,6 +200,35 @@ export default function AdminPage() {
             className="text-sm text-gray-600 hover:text-black"
           >
             로그아웃
+          </button>
+        </div>
+
+        {/* 탭 */}
+        <div className="flex gap-2 border-b">
+          <button
+            type="button"
+            onClick={() => setActiveTab("today")}
+            className={`px-4 py-2 font-medium transition-colors ${
+              activeTab === "today"
+                ? "text-black border-b-2 border-black"
+                : "text-gray-400 hover:text-gray-600"
+            }`}
+          >
+            오늘 Poll
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab("tomorrow")}
+            className={`px-4 py-2 font-medium transition-colors relative ${
+              activeTab === "tomorrow"
+                ? "text-black border-b-2 border-black"
+                : "text-gray-400 hover:text-gray-600"
+            }`}
+          >
+            내일 Poll
+            {hasTomorrow && (
+              <span className="absolute -top-1 -right-1 w-2 h-2 bg-green-500 rounded-full"></span>
+            )}
           </button>
         </div>
 
@@ -185,31 +278,57 @@ export default function AdminPage() {
           </div>
         </div>
 
-        <div className="border-t pt-4">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-sm text-gray-600">현재 투표 현황</span>
-            <span className="text-sm font-semibold">
-              A: {currentVotes.A} | B: {currentVotes.B}
-            </span>
+        {/* 오늘 poll 전용 옵션 */}
+        {activeTab === "today" && (
+          <div className="border-t pt-4">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm text-gray-600">현재 투표 현황</span>
+              <span className="text-sm font-semibold">
+                A: {currentVotes.A} | B: {currentVotes.B}
+              </span>
+            </div>
+            <label className="flex items-center gap-2 text-sm text-gray-700">
+              <input
+                type="checkbox"
+                checked={resetVotes}
+                onChange={(e) => setResetVotes(e.target.checked)}
+                className="rounded"
+              />
+              투표 수를 0으로 초기화 (새 질문 등록시 권장)
+            </label>
           </div>
-          <label className="flex items-center gap-2 text-sm text-gray-700">
-            <input
-              type="checkbox"
-              checked={resetVotes}
-              onChange={(e) => setResetVotes(e.target.checked)}
-              className="rounded"
-            />
-            투표 수를 0으로 초기화 (새 질문 등록시 권장)
-          </label>
-        </div>
+        )}
 
-        <button
-          type="submit"
-          disabled={saving}
-          className="w-full rounded-lg bg-black text-white py-3 font-semibold hover:bg-gray-800 disabled:opacity-50"
-        >
-          {saving ? "저장 중..." : "저장"}
-        </button>
+        {/* 내일 poll 안내 */}
+        {activeTab === "tomorrow" && (
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <p className="text-sm text-blue-800">
+              💡 내일 poll은 자정(00:00)에 자동으로 오늘 poll로 전환됩니다.
+              {hasTomorrow && " 현재 내일 poll이 예약되어 있습니다."}
+            </p>
+          </div>
+        )}
+
+        <div className="flex gap-2">
+          <button
+            type="submit"
+            disabled={saving}
+            className="flex-1 rounded-lg bg-black text-white py-3 font-semibold hover:bg-gray-800 disabled:opacity-50"
+          >
+            {saving ? "저장 중..." : activeTab === "today" ? "저장" : "예약"}
+          </button>
+          
+          {activeTab === "tomorrow" && hasTomorrow && (
+            <button
+              type="button"
+              onClick={handleDeleteTomorrow}
+              disabled={saving}
+              className="rounded-lg border border-red-300 text-red-600 px-4 py-3 font-semibold hover:bg-red-50 disabled:opacity-50"
+            >
+              삭제
+            </button>
+          )}
+        </div>
 
         {message && <p className="text-center text-sm text-gray-600">{message}</p>}
       </form>
