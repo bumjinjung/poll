@@ -29,8 +29,8 @@ export default async function HistoryPage() {
           const poll = item.poll;
           if (!poll) return null;
           
-          const totalVotes = poll.optionA.votes + poll.optionB.votes;
-          const formattedDate = new Date(item.timestamp).toLocaleDateString("ko-KR", {
+          const totalVotes = item.votes.A + item.votes.B;
+          const formattedDate = new Date(item.date).toLocaleDateString("ko-KR", {
             year: "numeric",
             month: "short",
             day: "numeric",
@@ -38,7 +38,7 @@ export default async function HistoryPage() {
 
           return (
             <div
-              key={item.timestamp}
+              key={item.date}
               className="p-6 bg-white rounded-2xl shadow-sm hover:shadow-md transition-shadow"
             >
               <div className="flex items-start justify-between mb-4">
@@ -56,8 +56,8 @@ export default async function HistoryPage() {
 
               <div className="space-y-3">
                 {[
-                  { text: poll.optionA.text, votes: poll.optionA.votes },
-                  { text: poll.optionB.text, votes: poll.optionB.votes }
+                  { text: `${poll.left.emoji} ${poll.left.label}`, votes: item.votes.A },
+                  { text: `${poll.right.emoji} ${poll.right.label}`, votes: item.votes.B }
                 ].map((option, idx) => {
                   const percentage =
                     totalVotes > 0 ? (option.votes / totalVotes) * 100 : 0;
