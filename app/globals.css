@@ -12,6 +12,8 @@ body {
   height: 100%;
   background: linear-gradient(to bottom, #fafafa 0%, #f0f0f0 100%);
   min-height: 100vh;
+  overscroll-behavior: none;
+  overflow: hidden;
   color: #1a1a1a;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;

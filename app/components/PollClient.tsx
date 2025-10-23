@@ -108,10 +108,10 @@ export default function PollClient({
   const percentB = total > 0 ? Math.round((votes.B / total) * 100) : 50;
 
   return (
-    <div className="h-dvh overflow-hidden flex flex-col items-center justify-center p-3 sm:p-6">
-      <div className="w-full max-w-4xl flex flex-col items-center gap-8 sm:gap-12 md:gap-16">
+    <div className="fixed inset-0 h-[100svh] overflow-hidden flex flex-col items-center justify-center p-3 sm:p-6 overscroll-none">
+      <div className="w-full max-w-4xl flex flex-col items-center gap-6 sm:gap-10 md:gap-16 px-3">
         <div className="text-center px-4">
-          <h2 className="text-2xl sm:text-3xl md:text-4xl font-semibold text-gray-800">
+          <h2 className="text-xl sm:text-3xl md:text-4xl font-semibold text-gray-800">
             {config.question}
           </h2>
         </div>
@@ -121,7 +121,7 @@ export default function PollClient({
             onClick={() => handleVote("A")}
             disabled={showResult}
             className={`
-              group relative w-32 h-32 sm:w-44 sm:h-44 md:w-52 md:h-52 rounded-[1.5rem] sm:rounded-[2rem] overflow-hidden
+              group relative w-28 h-28 sm:w-44 sm:h-44 md:w-52 md:h-52 rounded-[1.25rem] sm:rounded-[2rem] overflow-hidden
               transition-all duration-300 ease-out
               ${showResult ? "cursor-default" : "cursor-pointer hover:scale-[1.02]"}
               ${selected === "A" ? "shadow-2xl shadow-blue-200/50" : "shadow-lg hover:shadow-xl"}
@@ -135,10 +135,10 @@ export default function PollClient({
             />
 
             <div className="relative h-full flex flex-col items-center justify-center p-3 sm:p-4 gap-1 sm:gap-2">
-              <div className={`text-3xl sm:text-4xl md:text-5xl transition-transform duration-300 ${selected === "A" ? "scale-110" : "group-hover:scale-105"}`}>
+              <div className={`text-2xl sm:text-4xl md:text-5xl transition-transform duration-300 ${selected === "A" ? "scale-110" : "group-hover:scale-105"}`}>
                 {config.left.emoji ?? ""}
               </div>
-              <div className={`text-sm sm:text-base md:text-lg font-semibold transition-colors ${selected === "A" ? "text-white" : "text-gray-800"}`}>
+              <div className={`text-xs sm:text-base md:text-lg font-semibold transition-colors ${selected === "A" ? "text-white" : "text-gray-800"}`}>
                 {config.left.label}
               </div>
               {showResult && synced && (
@@ -157,7 +157,7 @@ export default function PollClient({
             onClick={() => handleVote("B")}
             disabled={showResult}
             className={`
-              group relative w-32 h-32 sm:w-44 sm:h-44 md:w-52 md:h-52 rounded-[1.5rem] sm:rounded-[2rem] overflow-hidden
+              group relative w-28 h-28 sm:w-44 sm:h-44 md:w-52 md:h-52 rounded-[1.25rem] sm:rounded-[2rem] overflow-hidden
               transition-all duration-300 ease-out
               ${showResult ? "cursor-default" : "cursor-pointer hover:scale-[1.02]"}
               ${selected === "B" ? "shadow-2xl shadow-purple-200/50" : "shadow-lg hover:shadow-xl"}
@@ -171,10 +171,10 @@ export default function PollClient({
             />
 
             <div className="relative h-full flex flex-col items-center justify-center p-3 sm:p-4 gap-1 sm:gap-2">
-              <div className={`text-3xl sm:text-4xl md:text-5xl transition-transform duration-300 ${selected === "B" ? "scale-110" : "group-hover:scale-105"}`}>
+              <div className={`text-2xl sm:text-4xl md:text-5xl transition-transform duration-300 ${selected === "B" ? "scale-110" : "group-hover:scale-105"}`}>
                 {config.right.emoji ?? ""}
               </div>
-              <div className={`text-sm sm:text-base md:text-lg font-semibold transition-colors ${selected === "B" ? "text-white" : "text-gray-800"}`}>
+              <div className={`text-xs sm:text-base md:text-lg font-semibold transition-colors ${selected === "B" ? "text-white" : "text-gray-800"}`}>
                 {config.right.label}
               </div>
               {showResult && synced && (
