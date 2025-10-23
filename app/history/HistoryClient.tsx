@@ -11,7 +11,7 @@ type HistoryClientProps = {
 export default function HistoryClient({ initialCursor }: HistoryClientProps) {
   const [items, setItems] = useState<PollHistoryItem[]>([]);
   const [loading, setLoading] = useState(false);
-  const [hasMore, setHasMore] = useState(true);
+  const [hasMore, setHasMore] = useState(!!initialCursor);
   const [nextCursor, setNextCursor] = useState<string | null>(initialCursor);
   const sentinelRef = useRef<HTMLDivElement | null>(null);
 
