@@ -1,0 +1,11 @@
+{
+  "question": "이성친구 가능 VS 불가능",
+  "left": {
+    "label": "가능",
+    "emoji": "🙆"
+  },
+  "right": {
+    "label": "불가능",
+    "emoji": "🙅"
+  }
+}
