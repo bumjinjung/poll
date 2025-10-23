@@ -40,9 +40,15 @@ export async function GET() {
 // 설문 질문 업데이트 (관리자 전용)
 export async function POST(req: NextRequest) {
   const key = req.headers.get("x-admin-key") || "";
+  
+  // 디버깅용 (배포 환경 확인)
+  console.log("🔑 Received:", key.substring(0, 3) + "...");
+  console.log("🔑 Expected:", ADMIN_KEY.substring(0, 3) + "...");
+  console.log("🔑 Match:", key === ADMIN_KEY);
+  
   if (key !== ADMIN_KEY) {
     return NextResponse.json(
-      { success: false, message: "권한이 없습니다." },
+      { success: false, message: `권한이 없습니다. (received: ${key.substring(0, 3)}..., expected: ${ADMIN_KEY.substring(0, 3)}...)` },
       { status: 401 }
     );
   }
