@@ -14,9 +14,16 @@ export const metadata: Metadata = {
   keywords: "설문조사, poll, 투표, survey",
   authors: [{ name: "Poll Team" }],
   openGraph: {
-    title: "Poll",
-    description: "매일 하나씩 가벼운 설문조사",
+    title: "Poll - 매일 하나씩 가벼운 설문조사",
+    description: "매일 새로운 설문조사를 통해 의견을 나누세요!",
     type: "website",
+    locale: "ko_KR",
+    siteName: "Poll",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Poll - 매일 하나씩 가벼운 설문조사",
+    description: "매일 새로운 설문조사를 통해 의견을 나누세요!",
   },
 };
 
