@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import Link from "next/link";
 
 type TwoChoicePollConfig = {
@@ -23,11 +23,123 @@ export default function PollClient({
   const [selected, setSelected] = useState<"A" | "B" | null>(null);
   const [showResult, setShowResult] = useState(false);
   const [synced, setSynced] = useState(false);
+  const [isVisible, setIsVisible] = useState(false);
+  const [animatedPercentA, setAnimatedPercentA] = useState(0);
+  const [animatedPercentB, setAnimatedPercentB] = useState(0);
+  const [animatedVotesA, setAnimatedVotesA] = useState(0);
+  const [animatedVotesB, setAnimatedVotesB] = useState(0);
+  const [isUpdating, setIsUpdating] = useState(false);
+  const [animatedTotal, setAnimatedTotal] = useState(0);
+  const [previousTotal, setPreviousTotal] = useState(0);
+  const [previousPercentA, setPreviousPercentA] = useState(0);
+  const [previousPercentB, setPreviousPercentB] = useState(0);
+  const [previousVotesA, setPreviousVotesA] = useState(0);
+  const [previousVotesB, setPreviousVotesB] = useState(0);
+  const cardRef = useRef<HTMLDivElement>(null);
 
   const storageKey = useMemo(
     () => `poll-voted-${config?.question || ""}`,
     [config?.question]
   );
+
+  // 카드 등장 애니메이션
+  useEffect(() => {
+    const timer = setTimeout(() => setIsVisible(true), 100);
+    return () => clearTimeout(timer);
+  }, []);
+
+  const total = votes.A + votes.B;
+  const percentA = total > 0 ? Math.round((votes.A / total) * 100) : 50;
+  const percentB = total > 0 ? Math.round((votes.B / total) * 100) : 50;
+
+  // 자릿수별 개별 애니메이션 함수
+  const animateDigitChange = (previous: number, current: number, setter: (value: number) => void) => {
+    if (previous === current) return;
+    
+    const duration = 600; // 0.6초
+    const steps = 20;
+    const stepDuration = duration / steps;
+    
+    let progress = 0;
+    const timer = setInterval(() => {
+      progress += 1 / steps;
+      if (progress >= 1) {
+        setter(current);
+        clearInterval(timer);
+      } else {
+        // 이전 값에서 현재 값으로 부드럽게 변화
+        const animatedValue = previous + (current - previous) * progress;
+        setter(Math.round(animatedValue));
+      }
+    }, stepDuration);
+  };
+
+  // 퍼센트 카운팅 애니메이션 (첫 로드 시)
+  useEffect(() => {
+    if (showResult && synced && previousPercentA === 0) {
+      const duration = 1500; // 1.5초
+      const steps = 60;
+      const stepDuration = duration / steps;
+      
+      const animateValue = (start: number, end: number, setter: (value: number) => void) => {
+        let current = start;
+        const increment = (end - start) / steps;
+        const timer = setInterval(() => {
+          current += increment;
+          if (current >= end) {
+            setter(end);
+            clearInterval(timer);
+          } else {
+            setter(Math.round(current));
+          }
+        }, stepDuration);
+      };
+
+      animateValue(0, percentA, setAnimatedPercentA);
+      animateValue(0, percentB, setAnimatedPercentB);
+      animateValue(0, votes.A, setAnimatedVotesA);
+      animateValue(0, votes.B, setAnimatedVotesB);
+      animateValue(0, total, setAnimatedTotal);
+      
+      // 첫 로드 후 이전 값들 저장
+      setPreviousPercentA(percentA);
+      setPreviousPercentB(percentB);
+      setPreviousVotesA(votes.A);
+      setPreviousVotesB(votes.B);
+      setPreviousTotal(total);
+    }
+  }, [showResult, synced, percentA, percentB, votes.A, votes.B, total, previousPercentA]);
+
+  // 업데이트 감지 시 개별 애니메이션
+  useEffect(() => {
+    if (showResult && synced && previousPercentA > 0) {
+      // 각 값이 변경되었을 때만 해당 값만 애니메이션
+      if (percentA !== previousPercentA) {
+        animateDigitChange(previousPercentA, percentA, setAnimatedPercentA);
+        setPreviousPercentA(percentA);
+      }
+      
+      if (percentB !== previousPercentB) {
+        animateDigitChange(previousPercentB, percentB, setAnimatedPercentB);
+        setPreviousPercentB(percentB);
+      }
+      
+      if (votes.A !== previousVotesA) {
+        animateDigitChange(previousVotesA, votes.A, setAnimatedVotesA);
+        setPreviousVotesA(votes.A);
+      }
+      
+      if (votes.B !== previousVotesB) {
+        animateDigitChange(previousVotesB, votes.B, setAnimatedVotesB);
+        setPreviousVotesB(votes.B);
+      }
+      
+      if (total !== previousTotal) {
+        animateDigitChange(previousTotal, total, setAnimatedTotal);
+        setPreviousTotal(total);
+      }
+    }
+  }, [showResult, synced, percentA, percentB, votes.A, votes.B, total, previousPercentA, previousPercentB, previousVotesA, previousVotesB, previousTotal]);
 
   useEffect(() => {
     const savedVote = localStorage.getItem(storageKey);
@@ -118,6 +230,7 @@ export default function PollClient({
 
   const fetchVotes = async () => {
     try {
+      setIsUpdating(true);
       const res = await fetch("/api/vote", { cache: "no-store" });
       const data = await res.json();
       if (data.success) {
@@ -125,6 +238,9 @@ export default function PollClient({
         setSynced(true);
       }
     } catch {}
+    finally {
+      setTimeout(() => setIsUpdating(false), 300);
+    }
   };
 
   const handleVote = async (choice: "A" | "B") => {
@@ -155,10 +271,6 @@ export default function PollClient({
     }
   };
 
-  const total = votes.A + votes.B;
-  const percentA = total > 0 ? Math.round((votes.A / total) * 100) : 50;
-  const percentB = total > 0 ? Math.round((votes.B / total) * 100) : 50;
-
   if (!config) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center p-4 sm:p-6">
@@ -176,7 +288,12 @@ export default function PollClient({
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-4 sm:p-6">
-      <div className="w-full max-w-4xl flex flex-col items-center gap-12 sm:gap-16 md:gap-20">
+      <div 
+        ref={cardRef}
+        className={`w-full max-w-4xl flex flex-col items-center gap-12 sm:gap-16 md:gap-20 transition-all duration-700 ease-out ${
+          isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
+        }`}
+      >
         <div className="text-center px-4">
           <h2 className="text-2xl sm:text-3xl md:text-4xl font-semibold text-gray-800">
             {config.question}
@@ -190,8 +307,8 @@ export default function PollClient({
             className={`
               group relative w-36 h-36 sm:w-44 sm:h-44 md:w-52 md:h-52 rounded-[1.5rem] sm:rounded-[2rem] overflow-hidden
               transition-all duration-300 ease-out
-              ${showResult ? "cursor-default" : "cursor-pointer hover:scale-[1.02]"}
-              ${selected === "A" ? "shadow-2xl shadow-blue-200/50" : "shadow-lg hover:shadow-xl"}
+              ${showResult ? "cursor-default" : "cursor-pointer hover:scale-[1.05] active:scale-[0.98]"}
+              ${selected === "A" ? "shadow-2xl shadow-blue-200/50" : showResult ? "shadow-lg" : "shadow-lg hover:shadow-xl hover:shadow-blue-100/30"}
             `}
           >
             <div
@@ -202,7 +319,7 @@ export default function PollClient({
             />
 
             <div className="relative h-full flex flex-col items-center justify-center p-3 sm:p-4 gap-1 sm:gap-2">
-              <div className={`text-3xl sm:text-4xl md:text-5xl transition-transform duration-300 ${selected === "A" ? "scale-110" : "group-hover:scale-105"}`}>
+              <div className={`text-3xl sm:text-4xl md:text-5xl transition-transform duration-300 ${selected === "A" ? "scale-110" : showResult ? "" : "group-hover:scale-105"}`}>
                 {config.left.emoji ?? ""}
               </div>
               <div className={`text-sm sm:text-base md:text-lg font-semibold transition-colors ${selected === "A" ? "text-white" : "text-gray-800"}`}>
@@ -210,8 +327,8 @@ export default function PollClient({
               </div>
               {showResult && synced && (
                 <div className={`mt-1 sm:mt-2 animate-fadeIn ${selected === "A" ? "text-white" : "text-gray-700"}`}>
-                  <div className="text-xl sm:text-2xl font-bold mb-0.5">{percentA}%</div>
-                  <div className={`text-xs ${selected === "A" ? "text-blue-100" : "text-gray-500"}`}>{votes.A} votes</div>
+                  <div className="text-xl sm:text-2xl font-bold mb-0.5">{animatedPercentA}%</div>
+                  <div className={`text-xs ${selected === "A" ? "text-blue-100" : "text-gray-500"}`}>{animatedVotesA.toLocaleString()} votes</div>
                 </div>
               )}
             </div>
@@ -226,8 +343,8 @@ export default function PollClient({
             className={`
               group relative w-36 h-36 sm:w-44 sm:h-44 md:w-52 md:h-52 rounded-[1.5rem] sm:rounded-[2rem] overflow-hidden
               transition-all duration-300 ease-out
-              ${showResult ? "cursor-default" : "cursor-pointer hover:scale-[1.02]"}
-              ${selected === "B" ? "shadow-2xl shadow-purple-200/50" : "shadow-lg hover:shadow-xl"}
+              ${showResult ? "cursor-default" : "cursor-pointer hover:scale-[1.05] active:scale-[0.98]"}
+              ${selected === "B" ? "shadow-2xl shadow-purple-200/50" : showResult ? "shadow-lg" : "shadow-lg hover:shadow-xl hover:shadow-purple-100/30"}
             `}
           >
             <div
@@ -238,7 +355,7 @@ export default function PollClient({
             />
 
             <div className="relative h-full flex flex-col items-center justify-center p-3 sm:p-4 gap-1 sm:gap-2">
-              <div className={`text-3xl sm:text-4xl md:text-5xl transition-transform duration-300 ${selected === "B" ? "scale-110" : "group-hover:scale-105"}`}>
+              <div className={`text-3xl sm:text-4xl md:text-5xl transition-transform duration-300 ${selected === "B" ? "scale-110" : showResult ? "" : "group-hover:scale-105"}`}>
                 {config.right.emoji ?? ""}
               </div>
               <div className={`text-sm sm:text-base md:text-lg font-semibold transition-colors ${selected === "B" ? "text-white" : "text-gray-800"}`}>
@@ -246,8 +363,8 @@ export default function PollClient({
               </div>
               {showResult && synced && (
                 <div className={`mt-1 sm:mt-2 animate-fadeIn ${selected === "B" ? "text-white" : "text-gray-700"}`}>
-                  <div className="text-xl sm:text-2xl font-bold mb-0.5">{percentB}%</div>
-                  <div className={`text-xs ${selected === "B" ? "text-purple-100" : "text-gray-500"}`}>{votes.B} votes</div>
+                  <div className="text-xl sm:text-2xl font-bold mb-0.5">{animatedPercentB}%</div>
+                  <div className={`text-xs ${selected === "B" ? "text-purple-100" : "text-gray-500"}`}>{animatedVotesB.toLocaleString()} votes</div>
                 </div>
               )}
             </div>
@@ -257,8 +374,10 @@ export default function PollClient({
           </button>
         </div>
 
-        <div className={`text-center ${!showResult || !synced ? "invisible" : ""}`}>
-          <p className="text-sm text-gray-400">총 {total.toLocaleString()}명 참여</p>
+        <div className={`text-center transition-all duration-300 ${!showResult || !synced ? "invisible" : ""}`}>
+          <p className="text-sm text-gray-400">
+            총 {animatedTotal.toLocaleString()}명 참여
+          </p>
           <Link 
             href="/history" 
             className="inline-block mt-2 text-xs text-gray-400 hover:text-gray-600 transition-colors"
