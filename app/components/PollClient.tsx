@@ -48,9 +48,9 @@ export default function PollClient({
     return () => clearTimeout(timer);
   }, []);
 
-  const total = votes.A + votes.B;
-  const percentA = total > 0 ? Math.round((votes.A / total) * 100) : 50;
-  const percentB = total > 0 ? Math.round((votes.B / total) * 100) : 50;
+  const total = (votes?.A || 0) + (votes?.B || 0);
+  const percentA = total > 0 ? Math.round(((votes?.A || 0) / total) * 100) : 50;
+  const percentB = total > 0 ? Math.round(((votes?.B || 0) / total) * 100) : 50;
 
   // 자릿수별 개별 애니메이션 함수
   const animateDigitChange = (previous: number, current: number, setter: (value: number) => void) => {
@@ -97,18 +97,18 @@ export default function PollClient({
 
       animateValue(0, percentA, setAnimatedPercentA);
       animateValue(0, percentB, setAnimatedPercentB);
-      animateValue(0, votes.A, setAnimatedVotesA);
-      animateValue(0, votes.B, setAnimatedVotesB);
+      animateValue(0, votes?.A || 0, setAnimatedVotesA);
+      animateValue(0, votes?.B || 0, setAnimatedVotesB);
       animateValue(0, total, setAnimatedTotal);
       
       // 첫 로드 후 이전 값들 저장
       setPreviousPercentA(percentA);
       setPreviousPercentB(percentB);
-      setPreviousVotesA(votes.A);
-      setPreviousVotesB(votes.B);
+      setPreviousVotesA(votes?.A || 0);
+      setPreviousVotesB(votes?.B || 0);
       setPreviousTotal(total);
     }
-  }, [showResult, synced, percentA, percentB, votes.A, votes.B, total, previousPercentA]);
+  }, [showResult, synced, percentA, percentB, votes?.A, votes?.B, total, previousPercentA]);
 
   // 업데이트 감지 시 개별 애니메이션
   useEffect(() => {
@@ -124,14 +124,14 @@ export default function PollClient({
         setPreviousPercentB(percentB);
       }
       
-      if (votes.A !== previousVotesA) {
-        animateDigitChange(previousVotesA, votes.A, setAnimatedVotesA);
-        setPreviousVotesA(votes.A);
+      if ((votes?.A || 0) !== previousVotesA) {
+        animateDigitChange(previousVotesA, votes?.A || 0, setAnimatedVotesA);
+        setPreviousVotesA(votes?.A || 0);
       }
       
-      if (votes.B !== previousVotesB) {
-        animateDigitChange(previousVotesB, votes.B, setAnimatedVotesB);
-        setPreviousVotesB(votes.B);
+      if ((votes?.B || 0) !== previousVotesB) {
+        animateDigitChange(previousVotesB, votes?.B || 0, setAnimatedVotesB);
+        setPreviousVotesB(votes?.B || 0);
       }
       
       if (total !== previousTotal) {
@@ -139,7 +139,7 @@ export default function PollClient({
         setPreviousTotal(total);
       }
     }
-  }, [showResult, synced, percentA, percentB, votes.A, votes.B, total, previousPercentA, previousPercentB, previousVotesA, previousVotesB, previousTotal]);
+  }, [showResult, synced, percentA, percentB, votes?.A, votes?.B, total, previousPercentA, previousPercentB, previousVotesA, previousVotesB, previousTotal]);
 
   useEffect(() => {
     const savedVote = localStorage.getItem(storageKey);
@@ -148,6 +148,7 @@ export default function PollClient({
         const data = JSON.parse(savedVote);
         setSelected(data.selected);
         setShowResult(true);
+        setSynced(true); // 이미 투표한 경우 즉시 synced를 true로 설정
       } catch {}
     } else {
       setSelected(null);
@@ -224,6 +225,7 @@ export default function PollClient({
         const { selected } = JSON.parse(savedVote);
         setSelected(selected);
         setShowResult(true);
+        setSynced(true); // 이미 투표한 경우 즉시 synced를 true로 설정
       }
     }
   }, [config, storageKey]);
@@ -236,6 +238,12 @@ export default function PollClient({
       if (data.success) {
         setVotes(data.votes);
         setSynced(true);
+        
+        // 서버에서 사용자의 투표 정보를 받았으면 상태 업데이트
+        if (data.userVote && !selected) {
+          setSelected(data.userVote);
+          setShowResult(true);
+        }
       }
     } catch {}
     finally {
@@ -261,9 +269,11 @@ export default function PollClient({
           localStorage.setItem(storageKey, JSON.stringify({ selected: choice }));
         }, 400);
       } else {
-        // 서버에서 중복 투표 감지
-        alert(data.message || "투표에 실패했습니다.");
-        setSelected(null);
+        // 서버에서 중복 투표 감지 - 알림 대신 결과 표시
+        setVotes(data.votes);
+        setSynced(true);
+        setShowResult(true);
+        // 이미 투표한 경우이므로 로컬 스토리지에 저장하지 않음
       }
     } catch {
       alert("투표에 실패했습니다. 다시 시도해주세요.");

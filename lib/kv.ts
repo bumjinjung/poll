@@ -295,17 +295,17 @@ export async function checkAndPromoteTomorrowPoll(): Promise<boolean> {
 
 // ========== 사용자 중복 투표 방지 ==========
 
-// 사용자가 현재 질문에 이미 투표했는지 확인
-export async function checkUserVoted(userHash: string, currentQuestion: string): Promise<boolean> {
+// 사용자가 현재 질문에 이미 투표했는지 확인하고 투표 정보 반환
+export async function checkUserVoted(userHash: string, currentQuestion: string): Promise<UserVoteRecord | null> {
   const key = `vote:user:${userHash}`;
   
   if (isDev) {
     const record = devStore.get(key) as UserVoteRecord | undefined;
-    return record?.question === currentQuestion;
+    return record?.question === currentQuestion ? record : null;
   }
   
   const record = await kv.get<UserVoteRecord>(key);
-  return record?.question === currentQuestion;
+  return record?.question === currentQuestion ? record : null;
 }
 
 // 사용자 투표 기록 저장

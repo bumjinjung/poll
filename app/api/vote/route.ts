@@ -39,8 +39,8 @@ export async function POST(req: Request) {
     const currentQuestion = currentPoll.question;
 
     // 이미 투표했는지 확인
-    const alreadyVoted = await checkUserVoted(userHash, currentQuestion);
-    if (alreadyVoted) {
+    const userVote = await checkUserVoted(userHash, currentQuestion);
+    if (userVote) {
       return NextResponse.json(
         { success: false, message: "이미 투표하셨습니다" },
         { status: 403 }
@@ -67,7 +67,29 @@ export async function POST(req: Request) {
 export async function GET() {
   try {
     const votes = await getVoteData();
-    return NextResponse.json({ success: true, votes });
+    
+    // 현재 질문 가져오기
+    const currentPoll = await getPollData();
+    if (!currentPoll) {
+      return NextResponse.json({ success: true, votes, userVote: null });
+    }
+    
+    // IP와 User-Agent 가져오기
+    const headersList = await headers();
+    const ip = headersList.get("x-forwarded-for")?.split(",")[0] || 
+               headersList.get("x-real-ip") || 
+               "unknown";
+    const ua = headersList.get("user-agent") || "unknown";
+    const userHash = getUserHash(ip, ua);
+    
+    // 사용자가 이미 투표했는지 확인하고 투표 정보 반환
+    const userVote = await checkUserVoted(userHash, currentPoll.question);
+    
+    return NextResponse.json({ 
+      success: true, 
+      votes, 
+      userVote: userVote ? userVote.choice : null 
+    });
   } catch (error) {
     console.error("Get votes error:", error);
     return NextResponse.json(
