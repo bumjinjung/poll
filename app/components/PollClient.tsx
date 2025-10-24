@@ -149,12 +149,18 @@ export default function PollClient({
         setSelected(data.selected);
         setShowResult(true);
         setSynced(true); // 이미 투표한 경우 즉시 synced를 true로 설정
+        // 애니메이션 상태를 현재 값으로 즉시 설정
+        setAnimatedPercentA(percentA);
+        setAnimatedPercentB(percentB);
+        setAnimatedVotesA(votes?.A || 0);
+        setAnimatedVotesB(votes?.B || 0);
+        setAnimatedTotal(total);
       } catch {}
     } else {
       setSelected(null);
       setShowResult(false);
     }
-  }, [storageKey]);
+  }, [storageKey, percentA, percentB, votes?.A, votes?.B, total]);
 
   useEffect(() => {
     // 첫 로드에 한 번 즉시 갱신 (결과 표시 중이면)
@@ -226,9 +232,15 @@ export default function PollClient({
         setSelected(selected);
         setShowResult(true);
         setSynced(true); // 이미 투표한 경우 즉시 synced를 true로 설정
+        // 애니메이션 상태를 현재 값으로 즉시 설정
+        setAnimatedPercentA(percentA);
+        setAnimatedPercentB(percentB);
+        setAnimatedVotesA(votes?.A || 0);
+        setAnimatedVotesB(votes?.B || 0);
+        setAnimatedTotal(total);
       }
     }
-  }, [config, storageKey]);
+  }, [config, storageKey, percentA, percentB, votes?.A, votes?.B, total]);
 
   const fetchVotes = async () => {
     try {
@@ -243,6 +255,12 @@ export default function PollClient({
         if (data.userVote && !selected) {
           setSelected(data.userVote);
           setShowResult(true);
+          // 애니메이션 상태를 현재 값으로 즉시 설정
+          setAnimatedPercentA(percentA);
+          setAnimatedPercentB(percentB);
+          setAnimatedVotesA(votes?.A || 0);
+          setAnimatedVotesB(votes?.B || 0);
+          setAnimatedTotal(total);
         }
       }
     } catch {}
