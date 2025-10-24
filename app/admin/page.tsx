@@ -30,9 +30,13 @@ export default function AdminPage() {
   const [message, setMessage] = useState<string | null>(null);
   const [isFadingOut, setIsFadingOut] = useState(false);
   const [loginError, setLoginError] = useState("");
+  const [autoGenerating, setAutoGenerating] = useState(false);
 
   useEffect(() => {
     if (isAuthenticated) {
+      // 상태 초기화 후 데이터 가져오기
+      setHasTomorrow(false);
+      setTomorrowConfig({ question: "", left: { label: "" }, right: { label: "" } });
       fetchData();
     }
   }, [isAuthenticated]);
@@ -48,11 +52,14 @@ export default function AdminPage() {
       .then((res) => {
         if (res?.data) setTodayConfig(res.data);
         if (res?.votes) setCurrentVotes(res.votes);
-        if (res?.tomorrow) {
+        
+        // 내일 설문 상태 확인 (더 엄격하게)
+        if (res?.tomorrow && res.tomorrow.question && res.tomorrow.question.trim() !== "") {
           setTomorrowConfig(res.tomorrow);
           setHasTomorrow(true);
         } else {
           setHasTomorrow(false);
+          setTomorrowConfig({ question: "", left: { label: "" }, right: { label: "" } });
         }
       })
       .catch(() => {});
@@ -199,6 +206,64 @@ export default function AdminPage() {
       }, 3500);
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleAutoGenerate = async (type: "today" | "tomorrow") => {
+    setAutoGenerating(true);
+    setMessage(null);
+    
+    try {
+      const res = await fetch("/api/admin/auto-generate", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ type }),
+      });
+      
+      const data = await res.json();
+      
+      if (data.success) {
+        // 성공 메시지 (ChatGPT 성공 또는 기본 템플릿 사용)
+        if (data.isFallback) {
+          setMessage(`⚠️ ${data.message}`);
+        } else {
+          setMessage(`✅ ${data.message}`);
+        }
+        
+        if (type === "today") {
+          setTodayConfig(data.poll);
+          setCurrentVotes({ A: 0, B: 0 });
+        } else if (type === "tomorrow" && data.poll && data.poll.question) {
+          setTomorrowConfig(data.poll);
+          setHasTomorrow(true);
+        }
+        
+        // 오류가 있으면 더 오래 표시
+        const displayTime = data.isFallback ? 5000 : 3500;
+        setTimeout(() => setIsFadingOut(true), displayTime - 400);
+        setTimeout(() => {
+          setMessage(null);
+          setIsFadingOut(false);
+        }, displayTime);
+      } else {
+        setMessage(`❌ ${data.message || "자동 생성 실패"}`);
+        setTimeout(() => setIsFadingOut(true), 3100);
+        setTimeout(() => {
+          setMessage(null);
+          setIsFadingOut(false);
+        }, 3500);
+      }
+    } catch (error) {
+      setMessage("자동 생성 중 오류가 발생했습니다.");
+      setTimeout(() => setIsFadingOut(true), 3100);
+      setTimeout(() => {
+        setMessage(null);
+        setIsFadingOut(false);
+      }, 3500);
+    } finally {
+      setAutoGenerating(false);
     }
   };
 
@@ -378,6 +443,16 @@ export default function AdminPage() {
               {saving ? "저장 중..." : activeTab === "today" ? "저장" : "예약"}
             </button>
             
+            <button
+              type="button"
+              onClick={() => handleAutoGenerate(activeTab)}
+              disabled={autoGenerating || saving}
+              className="rounded-lg bg-gradient-to-r from-green-500 to-teal-500 text-white text-xs font-semibold hover:from-green-600 hover:to-teal-600 disabled:opacity-50 flex items-center justify-center"
+              style={{ height: '30px', width: '60px' }}
+            >
+              {autoGenerating ? "생성 중..." : "🤖"}
+            </button>
+            
             {activeTab === "tomorrow" && hasTomorrow && (
               <button
                 type="button"
@@ -431,8 +506,10 @@ export default function AdminPage() {
           {/* 메시지 */}
           <div className={`rounded-lg px-2 text-center text-xs font-medium flex items-center justify-center ${
             message ? (
-              message.includes("실패") || message.includes("오류")
+              message.includes("❌") || message.includes("실패") || message.includes("오류")
                 ? "bg-red-100 text-red-700"
+                : message.includes("⚠️")
+                ? "bg-yellow-100 text-yellow-700"
                 : "bg-green-100 text-green-700"
             ) : ""
           } ${isFadingOut ? 'fade-out' : ''}`} style={{ height: '30px' }}>
