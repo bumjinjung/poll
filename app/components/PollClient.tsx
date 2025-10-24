@@ -261,6 +261,13 @@ export default function PollClient({
           setAnimatedVotesA(votes?.A || 0);
           setAnimatedVotesB(votes?.B || 0);
           setAnimatedTotal(total);
+          
+          // 서버에서 받은 투표 정보를 로컬스토리지에 저장
+          try {
+            localStorage.setItem(storageKey, JSON.stringify({ selected: data.userVote }));
+          } catch (e) {
+            // 시크릿 모드 등에서 로컬스토리지 접근 불가 시 무시
+          }
         }
       }
     } catch {}
