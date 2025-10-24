@@ -327,3 +327,57 @@ export async function recordUserVote(userHash: string, question: string, choice:
   await kv.set(key, record);
 }
 
+// ========== 히스토리 관리 ==========
+
+// 히스토리 삭제
+export async function deleteHistory(date: string): Promise<boolean> {
+  const historyKey = `poll:history:${date}`;
+  
+  if (isDev) {
+    const exists = devStore.has(historyKey);
+    if (exists) {
+      devStore.delete(historyKey);
+      saveDevData();
+      return true;
+    }
+    return false;
+  }
+  
+  const exists = await kv.exists(historyKey);
+  if (exists) {
+    await kv.del(historyKey);
+    return true;
+  }
+  return false;
+}
+
+// 히스토리 수정
+export async function updateHistory(date: string, votes: { A: number; B: number }): Promise<boolean> {
+  const historyKey = `poll:history:${date}`;
+  
+  if (isDev) {
+    const existingHistory = devStore.get(historyKey);
+    if (!existingHistory) return false;
+    
+    const updatedHistory = {
+      ...existingHistory,
+      votes: votes
+    };
+    
+    devStore.set(historyKey, updatedHistory);
+    saveDevData();
+    return true;
+  }
+  
+  const existingHistory = await kv.get(historyKey);
+  if (!existingHistory) return false;
+  
+  const updatedHistory = {
+    ...existingHistory,
+    votes: votes
+  };
+  
+  await kv.set(historyKey, updatedHistory);
+  return true;
+}
+

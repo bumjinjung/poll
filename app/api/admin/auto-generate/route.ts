@@ -43,23 +43,14 @@ export async function POST(req: Request) {
     const { type = "today" } = await req.json();
     
     if (type === "today") {
-      // 오늘 설문 생성
-      const existingPoll = await getPollData();
-      if (existingPoll) {
-        return NextResponse.json({ 
-          success: false, 
-          message: "오늘 설문이 이미 존재합니다." 
-        });
-      }
+      // 오늘 설문 생성 (이미 존재해도 새로운 설문 생성)
 
       const result = await generatePollWithChatGPT();
       
       if (!result.success) {
         // ChatGPT 실패 시 기본 템플릿으로 생성
         const fallbackPoll = getFallbackTemplate();
-        await setPollData(fallbackPoll);
-        await resetVotes();
-        
+        // 저장하지 않고 입력 필드에만 표시
         return NextResponse.json({ 
           success: true, 
           message: `ChatGPT 자동 생성 실패. 기본 템플릿으로 생성되었습니다. (오류: ${result.error})`,
@@ -69,34 +60,24 @@ export async function POST(req: Request) {
         });
       }
 
-      await setPollData(result.poll!);
-      await resetVotes();
-
+      // 저장하지 않고 입력 필드에만 표시
       return NextResponse.json({ 
         success: true, 
-        message: "ChatGPT로 오늘 설문이 생성되었습니다.",
+        message: "ChatGPT로 새로운 설문이 생성되었습니다.",
         poll: result.poll,
         isFallback: false
       });
     }
     
     if (type === "tomorrow") {
-      // 내일 설문 생성
-      const existingTomorrowPoll = await getTomorrowPoll();
-      if (existingTomorrowPoll) {
-        return NextResponse.json({ 
-          success: false, 
-          message: "내일 설문이 이미 존재합니다." 
-        });
-      }
+      // 내일 설문 생성 (이미 존재해도 새로운 설문 생성)
 
       const result = await generatePollWithChatGPT();
       
       if (!result.success) {
         // ChatGPT 실패 시 기본 템플릿으로 생성
         const fallbackPoll = getFallbackTemplate();
-        await setTomorrowPoll(fallbackPoll);
-        
+        // 저장하지 않고 입력 필드에만 표시
         return NextResponse.json({ 
           success: true, 
           message: `ChatGPT 자동 생성 실패. 기본 템플릿으로 생성되었습니다. (오류: ${result.error})`,
@@ -106,11 +87,10 @@ export async function POST(req: Request) {
         });
       }
 
-      await setTomorrowPoll(result.poll!);
-
+      // 저장하지 않고 입력 필드에만 표시
       return NextResponse.json({ 
         success: true, 
-        message: "ChatGPT로 내일 설문이 생성되었습니다.",
+        message: "ChatGPT로 새로운 내일 설문이 생성되었습니다.",
         poll: result.poll,
         isFallback: false
       });

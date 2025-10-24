@@ -16,12 +16,6 @@ export default function HistoryItem({
     if (!hostRef.current) return;
     const el = hostRef.current;
     
-    // 개발 환경에서는 즉시 애니메이션 실행
-    if (process.env.NODE_ENV === 'development') {
-      setVisible(true);
-      return;
-    }
-    
     const io = new IntersectionObserver(
       ([entry]) => {
         if (entry.isIntersecting) {

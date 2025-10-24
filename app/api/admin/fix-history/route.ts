@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { kv } from "@/lib/kv";
+import { updateHistory } from "@/lib/kv";
 
 export const runtime = "nodejs";
 
@@ -14,33 +14,20 @@ export async function POST(req: Request) {
       });
     }
     
-    // 히스토리 키 생성
-    const historyKey = `poll:history:${date}`;
+    const success = await updateHistory(date, votes);
     
-    // 기존 히스토리 데이터 가져오기
-    const existingHistory = await kv.get(historyKey);
-    
-    if (!existingHistory) {
+    if (success) {
+      return NextResponse.json({ 
+        success: true, 
+        message: `히스토리 ${date}가 성공적으로 수정되었습니다.`,
+        votes
+      });
+    } else {
       return NextResponse.json({ 
         success: false, 
         message: "해당 날짜의 히스토리를 찾을 수 없습니다." 
       });
     }
-    
-    // 투표 데이터만 업데이트
-    const updatedHistory = {
-      ...existingHistory,
-      votes: votes
-    };
-    
-    // 업데이트된 히스토리 저장
-    await kv.set(historyKey, updatedHistory);
-    
-    return NextResponse.json({ 
-      success: true, 
-      message: `히스토리 ${date}가 성공적으로 수정되었습니다.`,
-      updatedHistory
-    });
     
   } catch (error) {
     console.error("Fix history error:", error);
