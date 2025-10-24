@@ -249,16 +249,21 @@ export async function getPollHistory(): Promise<PollHistoryItem[]> {
   } else {
     // 프로덕션: Vercel KV에서 모든 히스토리 조회
     // Vercel KV는 패턴 검색을 지원하지 않으므로, 최근 일주일만 조회
+    const promises = [];
     for (let i = 0; i < 30; i++) {
       const date = new Date();
       date.setDate(date.getDate() - i);
       const dateStr = date.toISOString().split("T")[0];
       const historyKey = `poll:history:${dateStr}`;
-      const history = await (kv.get<PollHistoryItem>(historyKey));
+      promises.push(kv.get<PollHistoryItem>(historyKey));
+    }
+    
+    const results = await Promise.all(promises);
+    results.forEach(history => {
       if (history) {
         allHistory.push(history);
       }
-    }
+    });
   }
   
   return allHistory;

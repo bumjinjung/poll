@@ -217,6 +217,13 @@ export default function AdminPage() {
     }
   }, [isAuthenticated]);
 
+  // 탭 변경 시 서버에서 최신 데이터 가져오기
+  useEffect(() => {
+    if (isAuthenticated) {
+      fetchData();
+    }
+  }, [activeTab, isAuthenticated]);
+
   useEffect(() => {
     if (activeTab === "history" && isAuthenticated) {
       fetchHistory(true);
@@ -308,6 +315,18 @@ export default function AdminPage() {
     
     const config = activeTab === "today" ? todayConfig : tomorrowConfig;
     const isTomorrow = activeTab === "tomorrow";
+    
+    // 내일 설문이 이미 예약되어 있을 때 안내 메시지 표시
+    if (isTomorrow && hasTomorrow) {
+      setMessage("이미 내일 설문이 예약되어 있습니다. 기존 예약을 삭제한 후 다시 시도해주세요.");
+      setTimeout(() => setIsFadingOut(true), 3100);
+      setTimeout(() => {
+        setMessage(null);
+        setIsFadingOut(false);
+      }, 3500);
+      setSaving(false);
+      return;
+    }
     
     try {
       const res = await fetch("/api/admin/today", {
