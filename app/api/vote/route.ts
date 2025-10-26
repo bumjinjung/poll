@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { addVote, getVoteData, getPollData, checkUserVoted, recordUserVote } from "@/lib/kv";
 import { headers } from "next/headers";
 import crypto from "crypto";
+import { broadcastSSE } from "./stream/route";
 
 // IP + UA로 고유 해시 생성
 function getUserHash(ip: string, ua: string): string {
@@ -52,6 +53,12 @@ export async function POST(req: Request) {
 
     // 사용자 투표 기록
     await recordUserVote(userHash, currentQuestion, choice);
+
+    // SSE를 통해 모든 클라이언트에 투표 업데이트 브로드캐스트
+    broadcastSSE({
+      type: "vote_update",
+      votes
+    });
 
     return NextResponse.json({ success: true, votes });
   } catch (error) {

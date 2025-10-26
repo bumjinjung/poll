@@ -9,6 +9,11 @@ import {
   deleteTomorrowPoll,
   checkAndPromoteTomorrowPoll
 } from "@/lib/kv";
+import { broadcastSSE } from "../../vote/stream/route";
+
+// 완전 비캐시 처리
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 const ADMIN_KEY = process.env.ADMIN_KEY
 
@@ -40,6 +45,12 @@ export async function GET(req: NextRequest) {
       votes: voteData,
       tomorrow: tomorrowData,
       isAuthenticated: isAdmin
+    }, {
+      headers: {
+        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0'
+      }
     });
   } catch (e) {
     console.error("GET poll error:", e);
@@ -73,7 +84,13 @@ export async function POST(req: NextRequest) {
     // 내일 poll 삭제 요청
     if (deleteTomorrow) {
       await deleteTomorrowPoll();
-      return NextResponse.json({ success: true, message: "내일 poll이 삭제되었습니다." });
+      return NextResponse.json({ success: true, message: "내일 poll이 삭제되었습니다." }, {
+        headers: {
+          'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+          'Pragma': 'no-cache',
+          'Expires': '0'
+        }
+      });
     }
 
     if (
@@ -96,7 +113,13 @@ export async function POST(req: NextRequest) {
     // 내일 poll 저장
     if (isTomorrow) {
       await setTomorrowPoll(payload);
-      return NextResponse.json({ success: true, data: payload, message: "내일 poll이 저장되었습니다." });
+      return NextResponse.json({ success: true, data: payload, message: "내일 poll이 저장되었습니다." }, {
+        headers: {
+          'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+          'Pragma': 'no-cache',
+          'Expires': '0'
+        }
+      });
     }
 
     // 오늘 poll 저장 (기본)
@@ -107,7 +130,21 @@ export async function POST(req: NextRequest) {
       await resetVotes();
     }
 
-    return NextResponse.json({ success: true, data: payload });
+    // SSE를 통해 모든 클라이언트에 설정 업데이트 브로드캐스트
+    const votes = await getVoteData();
+    broadcastSSE({
+      type: "config_update",
+      config: payload,
+      votes
+    });
+
+    return NextResponse.json({ success: true, data: payload }, {
+      headers: {
+        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0'
+      }
+    });
   } catch (e) {
     console.error("POST poll error:", e);
     return NextResponse.json(

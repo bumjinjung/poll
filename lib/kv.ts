@@ -72,7 +72,20 @@ export interface UserVoteRecord {
 // 설문 질문 가져오기
 export async function getPollData(): Promise<PollData | null> {
   if (isDev) {
-    return devStore.get("poll:today") || null;
+    // 개발 환경에서는 매번 파일에서 최신 데이터 읽기
+    try {
+      if (fs.existsSync(DEV_DATA_FILE)) {
+        const data = fs.readFileSync(DEV_DATA_FILE, "utf-8");
+        const parsed = JSON.parse(data);
+        const pollData = parsed["poll:today"] || null;
+        return pollData;
+      }
+    } catch (error) {
+      console.error("Failed to read dev data file:", error);
+    }
+    // 파일이 없으면 메모리에서 읽기
+    const data = devStore.get("poll:today") || null;
+    return data;
   }
   const data = await kv.get<PollData>("poll:today");
   return data || null;
@@ -91,15 +104,28 @@ export async function setPollData(data: PollData): Promise<void> {
 // 투표 결과 가져오기
 export async function getVoteData(): Promise<VoteData> {
   if (isDev) {
+    // 개발 환경에서는 매번 파일에서 최신 데이터 읽기
+    try {
+      if (fs.existsSync(DEV_DATA_FILE)) {
+        const data = fs.readFileSync(DEV_DATA_FILE, "utf-8");
+        const parsed = JSON.parse(data);
+        const voteData = parsed["poll:votes"] || { A: 0, B: 0 };
+        return voteData;
+      }
+    } catch (error) {
+      console.error("Failed to read dev data file:", error);
+    }
+    // 파일이 없으면 메모리에서 읽기
     const data = devStore.get("poll:votes");
-    return data || { A: 0, B: 0 };
+    const result = data || { A: 0, B: 0 };
+    return result;
   }
   
   // Vercel KV에서는 A와 B를 따로 저장하므로 따로 조회
   const A = (await kv.get<number>("poll:votes:A")) || 0;
   const B = (await kv.get<number>("poll:votes:B")) || 0;
-  
-  return { A, B };
+  const result = { A, B };
+  return result;
 }
 
 // 투표 추가 (원자적 연산)
@@ -306,11 +332,30 @@ export async function checkUserVoted(userHash: string, currentQuestion: string):
   
   if (isDev) {
     const record = devStore.get(key) as UserVoteRecord | undefined;
-    return record?.question === currentQuestion ? record : null;
+    if (record) {
+      // 질문이 변경되었으면 question 필드만 현재 질문으로 업데이트
+      if (record.question !== currentQuestion) {
+        const updatedRecord = { ...record, question: currentQuestion };
+        devStore.set(key, updatedRecord);
+        saveDevData();
+        return updatedRecord;
+      }
+      return record;
+    }
+    return null;
   }
   
   const record = await kv.get<UserVoteRecord>(key);
-  return record?.question === currentQuestion ? record : null;
+  if (record) {
+    // 질문이 변경되었으면 question 필드만 현재 질문으로 업데이트
+    if (record.question !== currentQuestion) {
+      const updatedRecord = { ...record, question: currentQuestion };
+      await kv.set(key, updatedRecord);
+      return updatedRecord;
+    }
+    return record;
+  }
+  return null;
 }
 
 // 사용자 투표 기록 저장
@@ -385,4 +430,7 @@ export async function updateHistory(date: string, votes: { A: number; B: number 
   await kv.set(historyKey, updatedHistory);
   return true;
 }
+
+// ========== 테스트 전용 ==========
+
 

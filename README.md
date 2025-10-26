@@ -2,14 +2,19 @@
 
 간단하고 우아한 인터페이스로 매일 새로운 설문조사에 참여할 수 있는 Next.js 웹사이트입니다.
 
-## ✨ 특징
+## ✨ 주요 기능
 
-- 🎨 **아름다운 UI**: Tailwind CSS로 만든 현대적인 디자인
-- 📱 **반응형 디자인**: 모바일, 태블릿, 데스크톱 모두 지원
-- 💾 **로컬 스토리지**: 투표 기록이 자동으로 저장됨
-- 📊 **실시간 통계**: 투표 결과를 실시간으로 확인
-- 🎯 **매일 업데이트**: 자정마다 새로운 설문조사 제공
-- 🌐 **한국어 지원**: 완전한 한국어 UI
+- 🎨 **아름다운 UI**: Tailwind CSS로 만든 현대적인 디자인과 부드러운 애니메이션
+- 📱 **반응형 디자인**: 모바일, 태블릿, 데스크톱 모두 완벽 지원
+- 🗳️ **투표 시스템**: 중복 투표 방지, 선택지별 투표 카운트
+- 📊 **실시간 통계**: SSE(Server-Sent Events)로 투표 결과를 실시간으로 확인
+- ⏰ **자정 자동 전환**: 매일 자정에 자동으로 새로운 설문조사로 전환
+- 📜 **히스토리 관리**: 과거 설문조사 결과 저장 및 조회
+- 👤 **관리자 페이지**: 설문조사 관리, 내일 질문 미리 설정
+- 🔐 **사용자 인증**: IP + User-Agent 기반 사용자 추적
+- 💾 **데이터 저장**: Vercel KV 또는 로컬 스토리지
+- 🔄 **즉시 반영**: 관리자 페이지에서 질문 수정 시 모든 탭에 즉시 반영
+- 🚫 **캐시 비활성화**: 항상 최신 데이터 보장
 
 ## 🚀 시작하기
 
@@ -17,6 +22,7 @@
 
 - Node.js ≥ v18.x  
 - npm 또는 yarn
+- Vercel 계정 (프로덕션 배포용)
 
 ### 2. 저장소 클론 및 설치
 
@@ -24,27 +30,31 @@
 git clone https://github.com/username/poll.git
 cd poll
 npm install
-# 또는
-# yarn install
 ```
 
-### 3. 개발 서버 실행
+### 3. 환경 변수 설정
+
+프로덕션 환경의 경우 Vercel KV와 관리자 키를 설정해야 합니다:
+
+```env
+# .env.local
+KV_URL=your-vercel-kv-url
+KV_REST_API_URL=your-vercel-kv-rest-api-url
+KV_REST_API_TOKEN=your-vercel-kv-token
+ADMIN_KEY=your-admin-key
+```
+
+### 4. 개발 서버 실행
 
 ```bash
 npm run dev
-# 또는
-# yarn dev
 ```
 
 브라우저에서 [http://localhost:3000](http://localhost:3000) 접속
 
-### ⚙️ 로컬 개발 환경 데이터
+### 5. 개발 데이터 관리
 
 개발 모드에서는 자동으로 `.dev-data.json` 파일을 생성하여 로컬 데이터를 관리합니다:
-
-- **초기 데이터**: 앱 첫 실행 시 자동으로 기본값 로드
-- **자동 저장**: 투표, 설정 변경 시 즉시 파일에 저장
-- **데이터 초기화**: `npm run dev:reset` 명령으로 초기 상태로 리셋 가능
 
 ```bash
 # 개발 데이터 초기화 후 재시작
@@ -56,75 +66,123 @@ npm run dev:reset
 ```
 poll/
 ├── app/
+│   ├── api/
+│   │   ├── admin/
+│   │   │   └── today/          # 오늘/내일 설문 설정 API
+│   │   ├── vote/               # 투표 API
+│   │   │   └── stream/         # SSE 실시간 업데이트 API
+│   │   └── history/            # 히스토리 조회 API
+│   ├── admin/                  # 관리자 페이지
+│   ├── history/                # 히스토리 페이지
 │   ├── components/
-│   │   ├── PollCard.tsx        # 메인 설문조사 카드 컴포넌트
-│   │   └── PollOption.tsx      # 각 선택지 컴포넌트
-│   ├── data/
-│   │   └── polls.ts            # 설문조사 데이터
-│   ├── globals.css             # 전역 스타일
-│   ├── layout.tsx              # 루트 레이아웃
-│   └── page.tsx                # 메인 페이지
-├── public/                     # 정적 파일
-├── next.config.ts              # Next.js 설정
-├── tailwind.config.ts          # Tailwind CSS 설정
-├── tsconfig.json               # TypeScript 설정
-└── package.json                # 프로젝트 의존성
+│   │   └── PollClient.tsx      # 메인 설문조사 컴포넌트
+│   ├── globals.css
+│   ├── layout.tsx
+│   └── page.tsx
+├── lib/
+│   └── kv.ts                   # KV 저장소 관리 (Vercel KV / 로컬)
+├── scripts/
+├── .dev-data.json              # 개발용 로컬 데이터
+└── package.json
 ```
 
 ## 🎨 사용된 기술
 
-- **Next.js 15** - React 프레임워크
+- **Next.js 16** - React 프레임워크 (App Router)
 - **TypeScript** - 타입 안전성
-- **Tailwind CSS** - 유틸리티 CSS 프레임워크
+- **Tailwind CSS 4** - 유틸리티 CSS 프레임워크
+- **Vercel KV** - Key-Value 저장소
 - **React Hooks** - 상태 관리
+- **Server-Sent Events (SSE)** - 실시간 데이터 업데이트
+- **BroadcastChannel API** - 브라우저 탭 간 통신
 
-## 💡 주요 기능
+## 💡 주요 기능 상세
 
-### 1. 매일 다른 설문조사
-- `getTodaysPoll()` 함수로 오늘의 설문조사를 자동으로 표시
-- 날짜 기반으로 설문조사가 변경됨
+### 1. 투표 시스템
 
-### 2. 투표 기능
-- 클릭으로 간단하게 투표
-- 투표 후 결과를 즉시 확인 가능
-- 로컬 스토리지에 자동 저장
+- **중복 투표 방지**: IP + User-Agent 기반 사용자 추적
+- **실시간 업데이트**: SSE를 통한 투표 결과 즉시 반영
+- **사용자 투표 기록**: 질문이 변경되어도 투표 기록 유지
+- **깜빡임 방지**: `pendingChoice` 상태로 투표 중 버튼 색상 유지
 
-### 3. 실시간 통계
-- 투표율(%)을 시각적으로 표시
-- 총 투표 수 표시
-- 진행 바로 결과 표시
+### 2. 관리자 페이지 (`/admin`)
 
-## 🔧 커스터마이징
+- **오늘 질문 관리**: 현재 설문조사 수정
+- **내일 질문 설정**: 내일 나올 질문 미리 등록
+- **투표 초기화**: 투표 수를 0으로 리셋
+- **히스토리 조회**: 과거 설문조사 확인
+- **즉시 반영**: 질문 수정 시 모든 탭에 즉시 반영 (BroadcastChannel + localStorage)
 
-### 새로운 설문조사 추가
+### 3. 자정 자동 전환
 
-`app/data/polls.ts` 파일을 수정하여 새로운 설문조사를 추가할 수 있습니다:
+매일 자정(KST)에 자동으로 실행되는 전환 로직:
 
-```typescript
-{
-  id: 6,
-  question: "당신의 질문은?",
-  options: [
-    { id: 1, text: "선택지 1", votes: 0 },
-    { id: 2, text: "선택지 2", votes: 0 },
-    { id: 3, text: "선택지 3", votes: 0 },
-  ],
-  date: "2025-10-23",
-}
-```
+1. 어제의 설문조사와 투표 결과를 히스토리로 저장
+2. 미리 설정된 "내일 질문"이 있으면 오늘 질문으로 승격
+3. 투표 수 초기화
+
+### 4. 히스토리 관리
+
+- **과거 설문조사 보관**: 날짜별로 과거 설문조사와 투표 결과 저장
+- **히스토리 페이지**: 사용자가 과거 설문조사를 조회 가능
+- **데이터 수정**: 관리자가 과거 투표 결과 수정 가능
+
+### 5. 실시간 통신
+
+- **SSE (Server-Sent Events)**: 투표 수 실시간 업데이트
+- **BroadcastChannel**: 브라우저 탭 간 즉시 통신
+- **localStorage 이벤트**: 크로스 탭 데이터 동기화
+- **캐시 비활성화**: 항상 최신 데이터 보장
+
+### 6. 사용자 경험
+
+- **부드러운 애니메이션**: 투표 결과 표시 시 자연스러운 전환 효과
+- **로딩 상태**: 데이터 업데이트 중 로딩 인디케이터
+- **반응형 레이아웃**: 모든 화면 크기에서 최적화
+- **깜빡임 방지**: 투표 중 버튼 색상 안정적 유지
+
 
 ## 📦 빌드 및 배포
 
 ### 프로덕션 빌드
+
 ```bash
 npm run build
 npm start
 ```
 
 ### Vercel 배포 (추천)
-1. [Vercel](https://vercel.com)에 회원가입
-2. GitHub와 연결
-3. 저장소 연결하면 자동 배포
+
+1. GitHub에 저장소 푸시
+2. [Vercel](https://vercel.com)에 로그인
+3. 새 프로젝트 추가 → GitHub 저장소 선택
+4. 환경 변수 설정:
+   - `KV_URL`
+   - `KV_REST_API_URL`
+   - `KV_REST_API_TOKEN`
+   - `ADMIN_KEY`
+5. 배포 완료!
+
+## 🔐 보안
+
+- **관리자 키**: API 요청 시 `ADMIN_KEY` 헤더 필수
+- **사용자 추적**: IP + User-Agent 해시로 중복 투표 방지
+- **환경 변수**: 민감한 정보는 환경 변수로 관리
+
+## 📄 API 엔드포인트
+
+### 투표 API
+- `GET /api/vote` - 투표 결과 조회
+- `POST /api/vote` - 투표하기
+- `GET /api/vote/stream` - SSE 실시간 투표 수 업데이트
+
+### 관리자 API
+- `GET /api/admin/today` - 오늘/내일 설문 조회 (캐시 비활성화)
+- `POST /api/admin/today` - 오늘/내일 설문 설정 (캐시 비활성화)
+
+### 히스토리 API
+- `GET /api/history` - 히스토리 목록 조회
+- `GET /api/history/[date]` - 특정 날짜 히스토리 조회
 
 ## 🤝 기여
 

@@ -194,7 +194,6 @@ export default function AdminPage() {
     right: { label: "" },
   });
   const [hasTomorrow, setHasTomorrow] = useState(false);
-  const [resetVotes, setResetVotes] = useState(false);
   const [currentVotes, setCurrentVotes] = useState({ A: 0, B: 0 });
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -337,7 +336,7 @@ export default function AdminPage() {
         },
         body: JSON.stringify({ 
           ...config, 
-          resetVotesFlag: isTomorrow ? false : resetVotes,
+          resetVotesFlag: isTomorrow ? false : false, // 질문 수정 시에는 항상 투표 결과 유지
           isTomorrow
         }),
       });
@@ -353,17 +352,19 @@ export default function AdminPage() {
             setIsFadingOut(false);
           }, 3500);
         } else {
-          setMessage("저장되었습니다. 메인 페이지를 새로고침하세요.");
+          setMessage("저장되었습니다.");
           // 3.5초 후 메시지 fade-out
           setTimeout(() => setIsFadingOut(true), 3100);
           setTimeout(() => {
             setMessage(null);
             setIsFadingOut(false);
           }, 3500);
-          if (resetVotes) {
-            setCurrentVotes({ A: 0, B: 0 });
-            setResetVotes(false);
-          }
+          
+          // 브라우저 전체에 즉시 반영
+          const bc = new BroadcastChannel("poll_channel");
+          bc.postMessage({ type: "config_update" });
+          bc.close();
+          localStorage.setItem("poll:config:ver", String(Date.now()));
         }
         fetchData();
       } else {
@@ -834,17 +835,8 @@ export default function AdminPage() {
 
               {/* 오늘/내일 Poll 하단 정보 */}
               {activeTab === "today" ? (
-                <div className="px-2 flex items-center justify-between" style={{ height: '40px' }}>
+                <div className="px-2 flex items-center justify-center" style={{ height: '40px' }}>
                   <span className="text-xs text-gray-600">투표: A {currentVotes.A} · B {currentVotes.B}</span>
-                  <label className="flex items-center gap-1 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={resetVotes}
-                      onChange={(e) => setResetVotes(e.target.checked)}
-                      className="w-3 h-3 rounded"
-                    />
-                    <span className="text-xs text-gray-600">초기화</span>
-                  </label>
                 </div>
               ) : (
                 <div className="px-2 flex items-center justify-center" style={{ height: '40px' }}>

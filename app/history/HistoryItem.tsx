@@ -33,8 +33,8 @@ export default function HistoryItem({
   if (!poll) return null;
 
   const total = item.votes.A + item.votes.B;
-  const percentA = total ? Math.round((item.votes.A / total) * 100) : 50;
-  const percentB = total ? Math.round((item.votes.B / total) * 100) : 50;
+  const percentA = total > 0 ? Math.round((item.votes.A / total) * 100) : 0;
+  const percentB = total > 0 ? Math.round((item.votes.B / total) * 100) : 0;
   
   const dateStr = item.date || "2025-10-22";
   const formattedDate = new Date(dateStr).toLocaleDateString("ko-KR", {
@@ -76,26 +76,28 @@ export default function HistoryItem({
               }}
             />
             <div className="absolute inset-0 flex items-center justify-between" style={{ paddingLeft: '12px', paddingRight: '12px' }}>
-              <span className="text-xs text-white font-medium">
+              <span className={`text-xs font-medium ${percentA > 0 ? 'text-white' : 'text-gray-800'}`}>
                 {poll.left.emoji} {poll.left.label}
               </span>
-              <span className="text-xs text-gray-500 font-medium">
+              <span className={`text-xs font-medium ${percentA > 0 ? 'text-gray-500' : 'text-gray-700'}`}>
                 {item.votes.A.toLocaleString()}표
               </span>
             </div>
-            <span 
-              className="text-sm font-bold text-gray-800 absolute"
-              style={{
-                opacity: visible ? 1 : 0,
-                left: `${percentA}%`,
-                top: '50%',
-                transform: 'translateY(-50%) translateX(4px)',
-                transition: 'opacity 0.3s ease-out',
-                transitionDelay: visible ? '600ms' : '0ms'
-              }}
-            >
-              {percentA}%
-            </span>
+            {percentA > 0 && (
+              <span 
+                className="text-sm font-bold text-gray-800 absolute"
+                style={{
+                  opacity: visible ? 1 : 0,
+                  left: `${percentA}%`,
+                  top: '50%',
+                  transform: 'translateY(-50%) translateX(4px)',
+                  transition: 'opacity 0.3s ease-out',
+                  transitionDelay: visible ? '600ms' : '0ms'
+                }}
+              >
+                {percentA}%
+              </span>
+            )}
           </div>
         </div>
 
@@ -110,26 +112,28 @@ export default function HistoryItem({
               }}
             />
             <div className="absolute inset-0 flex items-center justify-between" style={{ paddingLeft: '12px', paddingRight: '12px' }}>
-              <span className="text-xs text-white font-medium">
+              <span className={`text-xs font-medium ${percentB > 0 ? 'text-white' : 'text-gray-800'}`}>
                 {poll.right.emoji} {poll.right.label}
               </span>
-              <span className="text-xs text-gray-500 font-medium">
+              <span className={`text-xs font-medium ${percentB > 0 ? 'text-gray-500' : 'text-gray-700'}`}>
                 {item.votes.B.toLocaleString()}표
               </span>
             </div>
-            <span 
-              className="text-sm font-bold text-gray-800 absolute"
-              style={{
-                opacity: visible ? 1 : 0,
-                left: `${percentB}%`,
-                top: '50%',
-                transform: 'translateY(-50%) translateX(4px)',
-                transition: 'opacity 0.3s ease-out',
-                transitionDelay: visible ? '720ms' : '0ms'
-              }}
-            >
-              {percentB}%
-            </span>
+            {percentB > 0 && (
+              <span 
+                className="text-sm font-bold text-gray-800 absolute"
+                style={{
+                  opacity: visible ? 1 : 0,
+                  left: `${percentB}%`,
+                  top: '50%',
+                  transform: 'translateY(-50%) translateX(4px)',
+                  transition: 'opacity 0.3s ease-out',
+                  transitionDelay: visible ? '720ms' : '0ms'
+                }}
+              >
+                {percentB}%
+              </span>
+            )}
           </div>
         </div>
       </div>

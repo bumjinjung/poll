@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getPollData, setPollData, getTomorrowPoll, setTomorrowPoll, resetVotes } from "@/lib/kv";
+import { getPollData, setPollData, getTomorrowPoll, setTomorrowPoll, resetVotes, getPollHistory } from "@/lib/kv";
 import { generatePollWithChatGPT } from "@/lib/chatgpt";
 
 function getFallbackTemplate() {
@@ -44,8 +44,12 @@ export async function POST(req: Request) {
     
     if (type === "today") {
       // 오늘 설문 생성 (이미 존재해도 새로운 설문 생성)
+      
+      // 최근 질문들을 가져와서 중복 방지
+      const history = await getPollHistory();
+      const recentQuestions = history.slice(0, 40).map(h => h.poll?.question).filter(Boolean) as string[];
 
-      const result = await generatePollWithChatGPT();
+      const result = await generatePollWithChatGPT(recentQuestions);
       
       if (!result.success) {
         // ChatGPT 실패 시 기본 템플릿으로 생성
@@ -71,8 +75,12 @@ export async function POST(req: Request) {
     
     if (type === "tomorrow") {
       // 내일 설문 생성 (이미 존재해도 새로운 설문 생성)
+      
+      // 최근 질문들을 가져와서 중복 방지
+      const history = await getPollHistory();
+      const recentQuestions = history.slice(0, 40).map(h => h.poll?.question).filter(Boolean) as string[];
 
-      const result = await generatePollWithChatGPT();
+      const result = await generatePollWithChatGPT(recentQuestions);
       
       if (!result.success) {
         // ChatGPT 실패 시 기본 템플릿으로 생성
