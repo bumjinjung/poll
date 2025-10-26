@@ -122,74 +122,15 @@ export default function PollClient({
     setPreviousPercentB(nextPercentB);
   }, []);
 
-  // 최초 결과 오픈 시(내가 투표 안했을 때)만 0→실값 카운팅
-  useEffect(() => {
-    if (!showResult || !synced || previousPercentA !== 0) return;
-    if (selected) {
-      setPreviousPercentA(percentA);
-      setPreviousPercentB(percentB);
-      setPreviousVotesA(votes?.A || 0);
-      setPreviousVotesB(votes?.B || 0);
-      setPreviousTotal(total);
-      return;
-    }
-    const start = performance.now();
-    const duration = ANIM_MS;
-    const fromTo = [
-      [0, percentA, setAnimatedPercentA],
-      [0, percentB, setAnimatedPercentB],
-      [0, votes?.A || 0, setAnimatedVotesA],
-      [0, votes?.B || 0, setAnimatedVotesB],
-      [0, total, setAnimatedTotal],
-    ] as const;
-    const tick = (t: number) => {
-      const p = Math.min((t - start) / duration, 1);
-      const eased = 1 - Math.pow(1 - p, 3);
-      for (const [from, to, set] of fromTo) set(Math.round(from + (to - from) * eased));
-      if (p < 1) requestAnimationFrame(tick);
-    };
-    requestAnimationFrame(tick);
-
-    setPreviousPercentA(percentA);
-    setPreviousPercentB(percentB);
-    setPreviousVotesA(votes?.A || 0);
-    setPreviousVotesB(votes?.B || 0);
-    setPreviousTotal(total);
-  }, [showResult, synced, previousPercentA, selected, percentA, percentB, votes?.A, votes?.B, total]);
-
-  // 이후 업데이트는 변화분만
-  useEffect(() => {
-    if (!canShowStats || previousPercentA === 0) return;
-      if (percentA !== previousPercentA) {
-        animateDigitChange(previousPercentA, percentA, setAnimatedPercentA);
-        setPreviousPercentA(percentA);
-      }
-      if (percentB !== previousPercentB) {
-        animateDigitChange(previousPercentB, percentB, setAnimatedPercentB);
-        setPreviousPercentB(percentB);
-      }
-      if ((votes?.A || 0) !== previousVotesA) {
-        animateDigitChange(previousVotesA, votes?.A || 0, setAnimatedVotesA);
-        setPreviousVotesA(votes?.A || 0);
-      }
-      if ((votes?.B || 0) !== previousVotesB) {
-        animateDigitChange(previousVotesB, votes?.B || 0, setAnimatedVotesB);
-        setPreviousVotesB(votes?.B || 0);
-      }
-      if (total !== previousTotal) {
-        animateDigitChange(previousTotal, total, setAnimatedTotal);
-        setPreviousTotal(total);
-      }
-  }, [
-    canShowStats,
-    percentA, percentB, votes?.A, votes?.B, total,
-    previousPercentA, previousPercentB, previousVotesA, previousVotesB, previousTotal
-  ]);
+  // 최초 결과 오픈 시(내가 투표 안했을 때)만 0→실값 카운팅 - 비활성화
+  // fetchVotes와 handleVote에서 직접 애니메이션 값을 설정하므로 불필요
 
   // ===== 서버 통신 =====
-  const fetchVotes = useCallback(async () => {
+  const fetchVotesAndConfig = useCallback(async () => {
     try {
       setIsUpdating(true);
+      
+      // 투표 결과 가져오기
       const res = await fetch("/api/vote", { cache: "no-store" });
       const data = await res.json();
       if (!data?.success) return;
@@ -226,6 +167,17 @@ export default function PollClient({
       
       // 방금 투표 플래그 해제
       justVotedRef.current = false;
+      
+      // 질문 변경 체크
+      const configRes = await fetch("/api/admin/today", { cache: "no-store" });
+      const configData = await configRes.json();
+      if (configData?.success && configData?.data) {
+        const newConfig = configData.data;
+        if (config && config.question !== newConfig.question) {
+          // 질문이 변경됨
+          setConfig(newConfig);
+        }
+      }
 
       if (data.userVote) {
         hasVotedRef.current = data.userVote;
@@ -244,12 +196,12 @@ export default function PollClient({
         try {
           const currentStorageKey = `poll-voted-${config?.question || ""}`;
           localStorage.setItem(currentStorageKey, JSON.stringify({ selected: data.userVote }));
-        } catch {}
-      } else {
+      } catch {}
+    } else {
         hasVotedRef.current = null;
         hasShownResultRef.current = false;
-        setSelected(null);
-        setShowResult(false);
+      setSelected(null);
+      setShowResult(false);
         setSynced(false);
         setNumbersVisible(false);
 
@@ -266,21 +218,21 @@ export default function PollClient({
   // ===== 2초 간격 폴링 =====
   useEffect(() => {
     // 초기 로드
-    fetchVotes();
+    fetchVotesAndConfig();
 
     // 2초마다 폴링
     pollIntervalRef.current = setInterval(() => {
       if (!document.hidden) {
-        fetchVotes();
+        fetchVotesAndConfig();
       }
     }, 2000);
 
     // 이벤트 리스너
-    const onFocus = () => fetchVotes();
+    const onFocus = () => fetchVotesAndConfig();
     const onPageShow = (e: PageTransitionEvent) => {
-      if (e.persisted || (document as any).wasDiscarded) fetchVotes();
+      if (e.persisted || (document as any).wasDiscarded) fetchVotesAndConfig();
     };
-    const onOnline = () => fetchVotes();
+    const onOnline = () => fetchVotesAndConfig();
 
     window.addEventListener("focus", onFocus);
     window.addEventListener("pageshow", onPageShow as any);
@@ -295,7 +247,7 @@ export default function PollClient({
       window.removeEventListener("pageshow", onPageShow as any);
       window.removeEventListener("online", onOnline);
     };
-  }, [fetchVotes]);
+  }, [fetchVotesAndConfig]);
 
   // showResult가 열린 "그 순간"만 숫자 공개 연출
   useEffect(() => {
@@ -316,34 +268,43 @@ export default function PollClient({
       try {
         localStorage.removeItem(`poll-voted-${prevQ}`);
       } catch {}
+      
+      prevQuestionRef.current = config.question;
+      setQuestionKey((k) => k + 1);
+
+      setPreviousPercentA(0);
+      setPreviousPercentB(0);
+      setPreviousVotesA(0);
+      setPreviousVotesB(0);
+      setPreviousTotal(0);
+      setAnimatedPercentA(0);
+      setAnimatedPercentB(0);
+      setAnimatedVotesA(0);
+      setAnimatedVotesB(0);
+      setAnimatedTotal(0);
+      setPendingChoice(null);
+      setSynced(false);
+
+          setShowResult(false);
+      hasShownResultRef.current = false;
+      hasVotedRef.current = null;
+      setNumbersVisible(false);
+      justVotedRef.current = false;
+      hasInitializedRef.current = false;
+
+      fetchVotesAndConfig();
+    } else if (!prevQuestionRef.current) {
+      // 최초 로드
+      prevQuestionRef.current = config.question;
     }
-    prevQuestionRef.current = config.question;
-    setQuestionKey((k) => k + 1);
-
-    setPreviousPercentA(0);
-    setPreviousPercentB(0);
-    setPreviousVotesA(0);
-    setPreviousVotesB(0);
-    setPreviousTotal(0);
-    setAnimatedPercentA(0);
-    setAnimatedPercentB(0);
-    setAnimatedVotesA(0);
-    setAnimatedVotesB(0);
-    setAnimatedTotal(0);
-    setPendingChoice(null);
-    setSynced(false);
-
-    setShowResult(false);
-    hasShownResultRef.current = false;
-    hasVotedRef.current = null;
-    setNumbersVisible(false);
-
-    fetchVotes();
-  }, [config?.question, fetchVotes]);
+  }, [config?.question, fetchVotesAndConfig]);
 
   // 로컬 저장된 내 투표 빠른 반영(최초 진입만)
+  const hasInitializedRef = useRef(false);
   useEffect(() => {
-    if (!config?.question) return;
+    if (!config?.question || hasInitializedRef.current) return;
+    hasInitializedRef.current = true;
+    
     try {
       const raw = localStorage.getItem(`poll-voted-${config.question}`);
       if (raw) {
@@ -352,22 +313,16 @@ export default function PollClient({
           hasVotedRef.current = parsed.selected;
           setSelected(parsed.selected);
           setShowResult(true);
-          if (!hasShownResultRef.current) {
-            hasShownResultRef.current = true;
-            setNumbersVisible(false);
-            setTimeout(() => setNumbersVisible(true), REVEAL_DELAY);
-          }
-          fetchVotes();
+          hasShownResultRef.current = true;
+          setNumbersVisible(false);
+          setTimeout(() => setNumbersVisible(true), REVEAL_DELAY);
+          fetchVotesAndConfig();
           return;
         }
       }
     } catch {}
-    setSelected(null);
-    setShowResult(false);
-    setSynced(false);
-    setNumbersVisible(false);
-    fetchVotes();
-  }, [config?.question, fetchVotes]);
+    fetchVotesAndConfig();
+  }, [config?.question, fetchVotesAndConfig]);
 
   // 투표 처리
   const handleVote = async (choice: "A" | "B") => {
@@ -397,7 +352,7 @@ export default function PollClient({
       setPreviousPercentA(nextPercentA);
       setPreviousPercentB(nextPercentB);
       
-      setSelected(choice);
+    setSelected(choice);
       setShowResult(true);
       setNumbersVisible(true);
     });
@@ -482,7 +437,7 @@ export default function PollClient({
         forceRefreshConfig();
       }
       if (event.data.type === "vote_update_hint") {
-        fetchVotes();
+        fetchVotesAndConfig();
       }
     };
 
@@ -498,7 +453,7 @@ export default function PollClient({
       window.removeEventListener("storage", onStorage);
       if (bcRef.current) bcRef.current = null;
     };
-  }, [forceRefreshConfig, fetchVotes]);
+  }, [forceRefreshConfig, fetchVotesAndConfig]);
 
   if (!config) {
     return (
@@ -652,15 +607,15 @@ export default function PollClient({
               style={{ animationDelay: "200ms" }}
             >
               총 <span className="inline-block">{animatedTotal.toLocaleString()}</span>명 참여
-            </p>
-            <Link 
-              href="/history" 
+          </p>
+          <Link 
+            href="/history" 
               className="inline-block text-xs text-gray-400 hover:text-gray-600 transition-all duration-200 hover:scale-105 animate-fadeInSlideUp"
               style={{ animationDelay: "350ms" }}
-            >
+          >
               이전 설문 결과 보기 →
-            </Link>
-          </div>
+          </Link>
+        </div>
         )}
       </div>
     </div>
