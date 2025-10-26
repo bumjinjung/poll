@@ -138,7 +138,9 @@ export default function PollClient({
       const v = data.votes;
       const voteChanged = votes.A !== v.A || votes.B !== v.B;
       
-      // 방금 투표한 직후라면 전체 로직 건너뛰기 (userVote 처리까지 스킵)
+      setVotes(v);
+      
+      // 방금 투표한 직후라면 나머지 로직 건너뛰기
       if (justVotedRef.current) {
         setSynced(true);
         
@@ -150,7 +152,6 @@ export default function PollClient({
         return;
       }
       
-      setVotes(v);
       setSynced(true);
 
       // 애니메이션 값 업데이트 (값이 변경되었거나 첫 로드일 때)

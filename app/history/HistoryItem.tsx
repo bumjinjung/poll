@@ -36,6 +36,10 @@ export default function HistoryItem({
   const percentA = total > 0 ? Math.round((item.votes.A / total) * 100) : 0;
   const percentB = total > 0 ? Math.round((item.votes.B / total) * 100) : 0;
   
+  // 극단적인 결과인지 체크 (한쪽이 90% 이상)
+  const isExtreme = percentA >= 90 || percentB >= 90;
+  const loserSide = percentA < percentB ? 'A' : 'B';
+  
   const dateStr = item.date || "2025-10-22";
   const formattedDate = new Date(dateStr).toLocaleDateString("ko-KR", {
     month: "short",
@@ -76,14 +80,18 @@ export default function HistoryItem({
               }}
             />
             <div className="absolute inset-0 flex items-center justify-between" style={{ paddingLeft: '12px', paddingRight: '12px' }}>
-              <span className={`text-xs font-medium ${percentA > 0 ? 'text-white' : 'text-gray-800'}`}>
+              <span className={`text-xs font-medium ${
+                isExtreme && loserSide === 'A' 
+                  ? 'text-gray-900 font-bold' 
+                  : percentA > 0 ? 'text-white' : 'text-gray-800'
+              }`}>
                 {poll.left.emoji} {poll.left.label}
               </span>
               <span className={`text-xs font-medium ${percentA > 0 ? 'text-gray-500' : 'text-gray-700'}`}>
                 {item.votes.A.toLocaleString()}표
               </span>
             </div>
-            {percentA > 0 && (
+            {percentA > 0 && !isExtreme && (
               <span 
                 className="text-sm font-bold text-gray-800 absolute"
                 style={{
@@ -112,14 +120,18 @@ export default function HistoryItem({
               }}
             />
             <div className="absolute inset-0 flex items-center justify-between" style={{ paddingLeft: '12px', paddingRight: '12px' }}>
-              <span className={`text-xs font-medium ${percentB > 0 ? 'text-white' : 'text-gray-800'}`}>
+              <span className={`text-xs font-medium ${
+                isExtreme && loserSide === 'B' 
+                  ? 'text-gray-900 font-bold' 
+                  : percentB > 0 ? 'text-white' : 'text-gray-800'
+              }`}>
                 {poll.right.emoji} {poll.right.label}
               </span>
               <span className={`text-xs font-medium ${percentB > 0 ? 'text-gray-500' : 'text-gray-700'}`}>
                 {item.votes.B.toLocaleString()}표
               </span>
             </div>
-            {percentB > 0 && (
+            {percentB > 0 && !isExtreme && (
               <span 
                 className="text-sm font-bold text-gray-800 absolute"
                 style={{
