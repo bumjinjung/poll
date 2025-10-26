@@ -553,11 +553,20 @@ export default function PollClient({
         const tot = data.votes.A + data.votes.B;
         const pA = tot ? Math.round((data.votes.A / tot) * 100) : 0;
         const pB = tot ? 100 - pA : 0;
+        
+        // 애니메이션 값 업데이트
         setAnimatedVotesA(data.votes.A);
         setAnimatedVotesB(data.votes.B);
         setAnimatedTotal(tot);
         setAnimatedPercentA(pA);
         setAnimatedPercentB(pB);
+        
+        // previous 값도 업데이트하여 useEffect 애니메이션 방지
+        setPreviousVotesA(data.votes.A);
+        setPreviousVotesB(data.votes.B);
+        setPreviousTotal(tot);
+        setPreviousPercentA(pA);
+        setPreviousPercentB(pB);
         
         // localStorage 저장
         try {
