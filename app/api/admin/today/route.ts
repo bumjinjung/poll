@@ -9,7 +9,6 @@ import {
   deleteTomorrowPoll,
   checkAndPromoteTomorrowPoll
 } from "@/lib/kv";
-import { broadcastSSE } from "../../vote/stream/route";
 
 // 완전 비캐시 처리
 export const dynamic = "force-dynamic";
@@ -129,14 +128,6 @@ export async function POST(req: NextRequest) {
     if (resetVotesFlag) {
       await resetVotes();
     }
-
-    // SSE를 통해 모든 클라이언트에 설정 업데이트 브로드캐스트
-    const votes = await getVoteData();
-    broadcastSSE({
-      type: "config_update",
-      config: payload,
-      votes
-    });
 
     return NextResponse.json({ success: true, data: payload }, {
       headers: {

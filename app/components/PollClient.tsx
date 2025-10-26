@@ -59,19 +59,10 @@ export default function PollClient({
   const [voteEffect, setVoteEffect] = useState<"A" | "B" | null>(null);
 
   // Refs
-  const sseRef = useRef<EventSource | null>(null);
-  const sseConnectedRef = useRef(false);
-  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  const backoffAttemptRef = useRef(0);
   const bcRef = useRef<BroadcastChannel | null>(null);
-  // 깜빡임 방지용
   const hasShownResultRef = useRef(false);
   const hasVotedRef = useRef<"A" | "B" | null>(null);
-  
-  // 낙관적 하한선 (다른 함수에서 사용)
-  const optimisticFloorRef = useRef<{ A: number; B: number } | null>(null);
-  const clearOptimisticTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const storageKey = useMemo(
     () => `poll-voted-${config?.question || ""}`,
@@ -194,49 +185,6 @@ export default function PollClient({
     previousPercentA, previousPercentB, previousVotesA, previousVotesB, previousTotal
   ]);
 
-  // ===== 낙관적 하한선 유틸 & 강제 동기화 =====
-  const applyOptimisticFloor = useCallback((v: VoteData): VoteData => {
-    const floor = optimisticFloorRef.current;
-    if (!floor) return v;
-    return { A: Math.max(v.A, floor.A), B: Math.max(v.B, floor.B) };
-  }, []);
-
-  const forceSyncAfterVote = useCallback(async () => {
-    const start = Date.now();
-    const timeoutMs = 2500;
-    const gapMs = 250;
-    while (Date.now() - start < timeoutMs) {
-      try {
-        const res = await fetch("/api/vote", { cache: "no-store" });
-        const data = await res.json();
-        if (data?.success) {
-          const v = applyOptimisticFloor(data.votes as VoteData);
-          let changed = false;
-          setVotes(prev => {
-            if (prev.A !== v.A || prev.B !== v.B) {
-              changed = true;
-              return v;
-            }
-            return prev;
-          });
-          if (changed) {
-            const tot = v.A + v.B;
-            const pA = tot ? Math.round((v.A / tot) * 100) : 0;
-            const pB = tot ? 100 - pA : 0;
-            setAnimatedVotesA(v.A);
-            setAnimatedVotesB(v.B);
-            setAnimatedTotal(tot);
-            setAnimatedPercentA(pA);
-            setAnimatedPercentB(pB);
-            setSynced(true);
-            break;
-          }
-        }
-      } catch {}
-      await new Promise(r => setTimeout(r, gapMs));
-    }
-  }, [applyOptimisticFloor]);
-
   // ===== 서버 통신 =====
   const fetchVotes = useCallback(async () => {
     try {
@@ -245,54 +193,52 @@ export default function PollClient({
       const data = await res.json();
       if (!data?.success) return;
 
-      // ★ 서버 값에도 하한선 적용
-      const v = applyOptimisticFloor(data.votes as VoteData);
+      const v = data.votes;
       setVotes(v);
       setSynced(true);
-      setNumbersVisible(true); // 동기화 도착 시에도 확실히 켭니다
+
+      // 애니메이션 값도 즉시 업데이트
+      const newTotal = v.A + v.B;
+      const newPercentA = newTotal ? Math.round((v.A / newTotal) * 100) : 0;
+      const newPercentB = newTotal ? 100 - newPercentA : 0;
+      
+      setAnimatedVotesA(v.A);
+      setAnimatedVotesB(v.B);
+      setAnimatedTotal(newTotal);
+      setAnimatedPercentA(newPercentA);
+      setAnimatedPercentB(newPercentB);
+      setPreviousVotesA(v.A);
+      setPreviousVotesB(v.B);
+      setPreviousTotal(newTotal);
+      setPreviousPercentA(newPercentA);
+      setPreviousPercentB(newPercentB);
 
       if (data.userVote) {
         hasVotedRef.current = data.userVote;
         setSelected(data.userVote);
 
         if (!hasShownResultRef.current) {
-        setShowResult(true);
+          setShowResult(true);
           hasShownResultRef.current = true;
           setNumbersVisible(false);
           setTimeout(() => setNumbersVisible(true), REVEAL_DELAY);
+        } else {
+          setShowResult(true);
+          setNumbersVisible(true);
         }
-
-        const newTotal = v.A + v.B;
-        const newPercentA = newTotal ? Math.round((v.A / newTotal) * 100) : 0;
-        const newPercentB = newTotal ? 100 - newPercentA : 0;
-        setAnimatedVotesA(v.A);
-        setAnimatedVotesB(v.B);
-        setAnimatedTotal(newTotal);
-        setAnimatedPercentA(newPercentA);
-        setAnimatedPercentB(newPercentB);
 
         try {
           const currentStorageKey = `poll-voted-${config?.question || ""}`;
           localStorage.setItem(currentStorageKey, JSON.stringify({ selected: data.userVote }));
-      } catch {}
-    } else {
-        // 🔥 서버에 투표 기록이 없다고 명시 → 로컬 기록/상태를 항상 초기화
+        } catch {}
+      } else {
         hasVotedRef.current = null;
         hasShownResultRef.current = false;
-
-      setSelected(null);
-      setShowResult(false);
+        setSelected(null);
+        setShowResult(false);
         setSynced(false);
         setNumbersVisible(false);
 
-        // 낙관적 하한선 / 타이머도 정리
-        optimisticFloorRef.current = null;
-        if (clearOptimisticTimerRef.current) {
-          clearTimeout(clearOptimisticTimerRef.current);
-          clearOptimisticTimerRef.current = null;
-        }
-
-        // localStorage 제거 (질문 동일해도 삭제)
         try {
           const currentStorageKey = `poll-voted-${config?.question || ""}`;
           localStorage.removeItem(currentStorageKey);
@@ -301,125 +247,41 @@ export default function PollClient({
     } finally {
       setTimeout(() => setIsUpdating(false), 180);
     }
-  }, [applyOptimisticFloor, config?.question, pendingChoice]);
+  }, [config?.question]);
 
-  // ===== SSE + 폴백 =====
-  const startFallbackPolling = useCallback(() => {
-    if (pollIntervalRef.current) return;
-    pollIntervalRef.current = setInterval(() => {
-      if (!sseConnectedRef.current && !document.hidden) {
-        fetchVotes();
-      }
-    }, 12000);
-  }, [fetchVotes]);
-
-  const stopFallbackPolling = useCallback(() => {
-    if (pollIntervalRef.current) {
-      clearInterval(pollIntervalRef.current);
-      pollIntervalRef.current = null;
-    }
-  }, []);
-
-  const openSSE = useCallback(() => {
-    if (sseRef.current) {
-      sseRef.current.close();
-      sseRef.current = null;
-    }
-
-    const es = new EventSource("/api/vote/stream");
-    sseRef.current = es;
-
-    es.onopen = () => {
-      sseConnectedRef.current = true;
-      backoffAttemptRef.current = 0;
-      stopFallbackPolling();
-    };
-
-    es.onmessage = (e) => {
-      try {
-        const payload = JSON.parse(e.data);
-
-        if (payload.type === "vote_update") {
-          // ★ SSE 값에도 하한선 적용
-          const vRaw = payload.votes as VoteData;
-          const v = applyOptimisticFloor(vRaw);
-          setVotes(prev => (prev.A === v.A && prev.B === v.B ? prev : v));
-          const newTotal = v.A + v.B;
-          const newPercentA = newTotal ? Math.round((v.A / newTotal) * 100) : 0;
-          const newPercentB = newTotal ? 100 - newPercentA : 0;
-          setAnimatedVotesA(v.A);
-          setAnimatedVotesB(v.B);
-          setAnimatedTotal(newTotal);
-          setAnimatedPercentA(newPercentA);
-          setAnimatedPercentB(newPercentB);
-          setSynced(true);
-        }
-
-        if (payload.type === "config_update" && payload.config) {
-          if (JSON.stringify(payload.config) !== JSON.stringify(config)) {
-            setConfig(payload.config);
-          }
-        }
-      } catch {}
-    };
-
-    es.onerror = () => {
-      sseConnectedRef.current = false;
-      es.close();
-
-      const attempt = backoffAttemptRef.current++;
-      const base = 800;
-      const max = 6000;
-      const delay = Math.min(base * Math.pow(2, attempt), max);
-
-      if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
-      reconnectTimeoutRef.current = setTimeout(() => {
-        startFallbackPolling();
-        openSSE();
-      }, delay);
-    };
-  }, [applyOptimisticFloor, config, startFallbackPolling, stopFallbackPolling]);
-
-  // 마운트 & 복귀 이벤트
+  // ===== 2초 간격 폴링 =====
   useEffect(() => {
-    openSSE();
+    // 초기 로드
+    fetchVotes();
 
-    const onVisible = () => {
+    // 2초마다 폴링
+    pollIntervalRef.current = setInterval(() => {
       if (!document.hidden) {
         fetchVotes();
-        if (!sseConnectedRef.current) startFallbackPolling();
-      } else {
-        stopFallbackPolling();
       }
-    };
+    }, 2000);
+
+    // 이벤트 리스너
     const onFocus = () => fetchVotes();
     const onPageShow = (e: PageTransitionEvent) => {
       if (e.persisted || (document as any).wasDiscarded) fetchVotes();
     };
     const onOnline = () => fetchVotes();
 
-    document.addEventListener("visibilitychange", onVisible);
     window.addEventListener("focus", onFocus);
     window.addEventListener("pageshow", onPageShow as any);
     window.addEventListener("online", onOnline);
 
     return () => {
-      document.removeEventListener("visibilitychange", onVisible);
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
+        pollIntervalRef.current = null;
+      }
       window.removeEventListener("focus", onFocus);
       window.removeEventListener("pageshow", onPageShow as any);
       window.removeEventListener("online", onOnline);
-
-      if (sseRef.current) {
-        sseRef.current.close();
-        sseRef.current = null;
-      }
-      if (reconnectTimeoutRef.current) {
-        clearTimeout(reconnectTimeoutRef.current);
-        reconnectTimeoutRef.current = null;
-      }
-      stopFallbackPolling();
     };
-  }, [openSSE, fetchVotes, startFallbackPolling, stopFallbackPolling]);
+  }, [fetchVotes]);
 
   // showResult가 열린 "그 순간"만 숫자 공개 연출
   useEffect(() => {
@@ -462,13 +324,6 @@ export default function PollClient({
     hasVotedRef.current = null;
     setNumbersVisible(false);
 
-    // ★ 질문이 바뀌면 하한선도 리셋
-    optimisticFloorRef.current = null;
-    if (clearOptimisticTimerRef.current) {
-      clearTimeout(clearOptimisticTimerRef.current);
-      clearOptimisticTimerRef.current = null;
-    }
-
     fetchVotes();
   }, [config?.question, fetchVotes]);
 
@@ -502,13 +357,12 @@ export default function PollClient({
 
   // 투표 처리
   const handleVote = async (choice: "A" | "B") => {
-    if (showResult) return; // 이미 투표한 경우
+    if (showResult) return;
     
     navigator.vibrate?.(20);
     
-    // 즉시 UI 업데이트 (낙관적 업데이트) - flushSync로 모든 상태를 동시에 업데이트
+    // 즉시 UI 업데이트 (낙관적 업데이트)
     flushSync(() => {
-      // 먼저 애니메이션 값 계산 및 설정
       const nextA = votes.A + (choice === "A" ? 1 : 0);
       const nextB = votes.B + (choice === "B" ? 1 : 0);
       const nextTotal = nextA + nextB;
@@ -526,7 +380,6 @@ export default function PollClient({
       setPreviousPercentA(nextPercentA);
       setPreviousPercentB(nextPercentB);
       
-      // UI 상태 업데이트
       setSelected(choice);
       setShowResult(true);
       setNumbersVisible(true);
@@ -548,32 +401,17 @@ export default function PollClient({
       const data = await res.json();
       
       if (data.success && data.votes) {
-        // 서버 응답으로 실제 값 업데이트
-        setVotes(data.votes);
-        const tot = data.votes.A + data.votes.B;
-        const pA = tot ? Math.round((data.votes.A / tot) * 100) : 0;
-        const pB = tot ? 100 - pA : 0;
+        // 서버 응답으로 실제 값 업데이트하되, 이미 낙관적으로 올린 값이 맞는지만 확인
+        const serverA = data.votes.A;
+        const serverB = data.votes.B;
         
-        // 애니메이션 값 업데이트
-        setAnimatedVotesA(data.votes.A);
-        setAnimatedVotesB(data.votes.B);
-        setAnimatedTotal(tot);
-        setAnimatedPercentA(pA);
-        setAnimatedPercentB(pB);
+        // votes 상태는 항상 서버 값으로 동기화
+        setVotes({ A: serverA, B: serverB });
         
-        // previous 값도 업데이트하여 useEffect 애니메이션 방지
-        setPreviousVotesA(data.votes.A);
-        setPreviousVotesB(data.votes.B);
-        setPreviousTotal(tot);
-        setPreviousPercentA(pA);
-        setPreviousPercentB(pB);
-        
-        // localStorage 저장
         try {
           localStorage.setItem(storageKey, JSON.stringify({ selected: choice }));
         } catch {}
         
-        // 다른 탭 동기화
         try {
           if (!bcRef.current) bcRef.current = new BroadcastChannel("poll_channel");
           bcRef.current.postMessage({ type: "vote_update_hint" });
@@ -582,12 +420,27 @@ export default function PollClient({
     } catch (error) {
       console.error("투표 실패:", error);
       alert("투표에 실패했습니다. 다시 시도해주세요.");
-      // 실패 시 초기화
+      
+      // 실패 시 이전 값으로 되돌리기
       setSelected(null);
       setShowResult(false);
       setNumbersVisible(false);
       hasVotedRef.current = null;
       hasShownResultRef.current = false;
+      
+      // 이전 투표 수로 되돌리기
+      setAnimatedVotesA(votes.A);
+      setAnimatedVotesB(votes.B);
+      setAnimatedTotal(votes.A + votes.B);
+      const pA = votes.A + votes.B > 0 ? Math.round((votes.A / (votes.A + votes.B)) * 100) : 0;
+      const pB = votes.A + votes.B > 0 ? 100 - pA : 0;
+      setAnimatedPercentA(pA);
+      setAnimatedPercentB(pB);
+      setPreviousVotesA(votes.A);
+      setPreviousVotesB(votes.B);
+      setPreviousTotal(votes.A + votes.B);
+      setPreviousPercentA(pA);
+      setPreviousPercentB(pB);
     }
   };
 
@@ -645,7 +498,7 @@ export default function PollClient({
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-4 sm:p-6">
-      <div className="w-full max-w-4xl flex flex-col items-center gap-12 sm:gap-16 md:gap-20 transition-all duration-700 ease-out">
+      <div className="w-full max-w-4xl flex flex-col items-center gap-12 sm:gap-16 md:gap-20 transition-all duration-500 ease-out">
         <div className="text-center px-4">
           <h2
             key={questionKey}
@@ -694,7 +547,7 @@ export default function PollClient({
             <div className={`relative z-10 h-full flex flex-col items-center p-3 sm:p-4 gap-1 sm:gap-2 ${
               showNumbers ? "justify-center" : "justify-center"
             }`}>
-              <div className={`text-3xl sm:text-4xl md:text-5xl transition-transform duration-300 ${isAActive ? "scale-110" : ""}`}>
+              <div className={`text-3xl sm:text-4xl md:text-5xl transition-transform duration-300 ${isAActive ? "scale-110 animate-emojiBounce" : ""}`}>
                 {config.left.emoji ?? ""}
               </div>
               <div className={`text-sm sm:text-base md:text-lg font-semibold ${isAActive ? "text-white" : "text-gray-800"}`}>
@@ -752,7 +605,7 @@ export default function PollClient({
             <div className={`relative z-10 h-full flex flex-col items-center p-3 sm:p-4 gap-1 sm:gap-2 ${
               showNumbers ? "justify-center" : "justify-center"
             }`}>
-              <div className={`text-3xl sm:text-4xl md:text-5xl transition-transform duration-300 ${isBActive ? "scale-110" : ""}`}>
+              <div className={`text-3xl sm:text-4xl md:text-5xl transition-transform duration-300 ${isBActive ? "scale-110 animate-emojiBounce" : ""}`}>
                 {config.right.emoji ?? ""}
               </div>
               <div className={`text-sm sm:text-base md:text-lg font-semibold ${isBActive ? "text-white" : "text-gray-800"}`}>
@@ -775,14 +628,23 @@ export default function PollClient({
           </button>
         </div>
 
-        <div className={`text-center transition-opacity duration-200 ${canShowStats ? "opacity-100" : "opacity-0"} pointer-events-none`}>
-          <p className="text-sm text-gray-400">
-            총 <span className="inline-block">{animatedTotal.toLocaleString()}</span>명 참여
-          </p>
-          <Link href="/history" className="inline-block mt-2 text-xs text-gray-400 hover:text-gray-600 transition-colors pointer-events-auto">
-            이전 설문 결과 보기
-          </Link>
-        </div>
+        {canShowStats && (
+          <div className="text-center flex flex-col items-center gap-2">
+            <p 
+              className="text-sm text-gray-400 animate-fadeInSlideUp"
+              style={{ animationDelay: "200ms" }}
+            >
+              총 <span className="inline-block">{animatedTotal.toLocaleString()}</span>명 참여
+            </p>
+            <Link 
+              href="/history" 
+              className="inline-block text-xs text-gray-400 hover:text-gray-600 transition-all duration-200 hover:scale-105 animate-fadeInSlideUp"
+              style={{ animationDelay: "350ms" }}
+            >
+              이전 설문 결과 보기 →
+            </Link>
+          </div>
+        )}
       </div>
     </div>
   );
