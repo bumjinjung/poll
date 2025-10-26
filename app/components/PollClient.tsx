@@ -375,12 +375,25 @@ export default function PollClient({
       const data = await res.json();
       
       if (data.success && data.votes) {
-        // 서버 응답으로 실제 값 업데이트하되, 이미 낙관적으로 올린 값이 맞는지만 확인
+        // 서버 응답으로 실제 값 업데이트
         const serverA = data.votes.A;
         const serverB = data.votes.B;
         
         // votes 상태는 항상 서버 값으로 동기화
         setVotes({ A: serverA, B: serverB });
+        
+        // 서버에서 userVote 확인 (재검증)
+        const verifyRes = await fetch("/api/vote", { cache: "no-store" });
+        const verifyData = await verifyRes.json();
+        
+        if (verifyData.success && verifyData.userVote) {
+          // 서버가 확인한 실제 투표 선택으로 업데이트
+          if (verifyData.userVote !== choice) {
+            console.warn(`투표 불일치 감지: 클라이언트=${choice}, 서버=${verifyData.userVote}`);
+            setSelected(verifyData.userVote);
+            hasVotedRef.current = verifyData.userVote;
+          }
+        }
         
         try {
           localStorage.setItem(storageKey, JSON.stringify({ selected: choice }));
@@ -390,31 +403,36 @@ export default function PollClient({
           if (!bcRef.current) bcRef.current = new BroadcastChannel("poll_channel");
           bcRef.current.postMessage({ type: "vote_update_hint" });
         } catch {}
+      } else {
+        // 서버가 성공을 반환하지 않으면 되돌리기
+        throw new Error("Server returned unsuccessful response");
       }
     } catch (error) {
       console.error("투표 실패:", error);
       alert("투표에 실패했습니다. 다시 시도해주세요.");
       
-      // 실패 시 이전 값으로 되돌리기
+      // 실패 시 완전 초기화 후 서버 상태 다시 확인
       setSelected(null);
       setShowResult(false);
       setNumbersVisible(false);
       hasVotedRef.current = null;
       hasShownResultRef.current = false;
+      justVotedRef.current = false;
       
-      // 이전 투표 수로 되돌리기
-      setAnimatedVotesA(votes.A);
-      setAnimatedVotesB(votes.B);
-      setAnimatedTotal(votes.A + votes.B);
-      const pA = votes.A + votes.B > 0 ? Math.round((votes.A / (votes.A + votes.B)) * 100) : 0;
-      const pB = votes.A + votes.B > 0 ? 100 - pA : 0;
-      setAnimatedPercentA(pA);
-      setAnimatedPercentB(pB);
-      setPreviousVotesA(votes.A);
-      setPreviousVotesB(votes.B);
-      setPreviousTotal(votes.A + votes.B);
-      setPreviousPercentA(pA);
-      setPreviousPercentB(pB);
+      // 서버에서 실제 상태 가져오기
+      try {
+        const recoverRes = await fetch("/api/vote", { cache: "no-store" });
+        const recoverData = await recoverRes.json();
+        if (recoverData.success) {
+          setVotes(recoverData.votes);
+          if (recoverData.userVote) {
+            setSelected(recoverData.userVote);
+            setShowResult(true);
+            hasVotedRef.current = recoverData.userVote;
+            hasShownResultRef.current = true;
+          }
+        }
+      } catch {}
     }
   };
 
