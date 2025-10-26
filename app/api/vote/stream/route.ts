@@ -45,7 +45,11 @@ export async function GET(request: NextRequest) {
       "Connection": "keep-alive",
       "Access-Control-Allow-Origin": "*",
       "Access-Control-Allow-Headers": "Cache-Control",
+      "Access-Control-Allow-Methods": "GET, OPTIONS",
       "X-Accel-Buffering": "no", // Nginx 버퍼링 비활성화
+      "X-Content-Type-Options": "nosniff",
+      "Pragma": "no-cache",
+      "Expires": "0",
     },
   });
 }
