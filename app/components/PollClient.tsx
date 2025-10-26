@@ -63,6 +63,7 @@ export default function PollClient({
   const bcRef = useRef<BroadcastChannel | null>(null);
   const hasShownResultRef = useRef(false);
   const hasVotedRef = useRef<"A" | "B" | null>(null);
+  const justVotedRef = useRef(false); // 방금 투표했는지 추적
 
   const storageKey = useMemo(
     () => `poll-voted-${config?.question || ""}`,
@@ -194,24 +195,37 @@ export default function PollClient({
       if (!data?.success) return;
 
       const v = data.votes;
+      const voteChanged = votes.A !== v.A || votes.B !== v.B;
+      
+      // 방금 투표한 직후라면 애니메이션 업데이트 건너뛰기
+      if (justVotedRef.current && !voteChanged) {
+        setSynced(true);
+        return;
+      }
+      
       setVotes(v);
       setSynced(true);
 
-      // 애니메이션 값도 즉시 업데이트
+      // 애니메이션 값 업데이트 (값이 변경되었거나 첫 로드일 때)
       const newTotal = v.A + v.B;
       const newPercentA = newTotal ? Math.round((v.A / newTotal) * 100) : 0;
       const newPercentB = newTotal ? 100 - newPercentA : 0;
       
-      setAnimatedVotesA(v.A);
-      setAnimatedVotesB(v.B);
-      setAnimatedTotal(newTotal);
-      setAnimatedPercentA(newPercentA);
-      setAnimatedPercentB(newPercentB);
-      setPreviousVotesA(v.A);
-      setPreviousVotesB(v.B);
-      setPreviousTotal(newTotal);
-      setPreviousPercentA(newPercentA);
-      setPreviousPercentB(newPercentB);
+      if (voteChanged || animatedTotal === 0) {
+        setAnimatedVotesA(v.A);
+        setAnimatedVotesB(v.B);
+        setAnimatedTotal(newTotal);
+        setAnimatedPercentA(newPercentA);
+        setAnimatedPercentB(newPercentB);
+        setPreviousVotesA(v.A);
+        setPreviousVotesB(v.B);
+        setPreviousTotal(newTotal);
+        setPreviousPercentA(newPercentA);
+        setPreviousPercentB(newPercentB);
+      }
+      
+      // 방금 투표 플래그 해제
+      justVotedRef.current = false;
 
       if (data.userVote) {
         hasVotedRef.current = data.userVote;
@@ -247,7 +261,7 @@ export default function PollClient({
     } finally {
       setTimeout(() => setIsUpdating(false), 180);
     }
-  }, [config?.question]);
+  }, [config?.question, votes.A, votes.B, animatedTotal]);
 
   // ===== 2초 간격 폴링 =====
   useEffect(() => {
@@ -360,6 +374,9 @@ export default function PollClient({
     if (showResult) return;
     
     navigator.vibrate?.(20);
+    
+    // 방금 투표했음을 표시
+    justVotedRef.current = true;
     
     // 즉시 UI 업데이트 (낙관적 업데이트)
     flushSync(() => {
