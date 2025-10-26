@@ -396,9 +396,10 @@ export default function PollClient({
     // 모바일 진동 추가
     navigator.vibrate?.(20);
     
-    // 즉시 선택 상태 설정 (깜빡임 방지)
+    // 즉시 선택 상태 설정 (깜빡임 방지 및 중복 투표 방지)
     setPendingChoice(choice);
     setSelected(choice);
+    setShowResult(true); // 즉시 결과 화면으로 전환하여 중복 투표 방지
     
     // 투표 효과 트리거
     setVoteEffect(choice);
@@ -430,6 +431,7 @@ export default function PollClient({
     } catch {
       alert("투표에 실패했습니다. 다시 시도해주세요.");
       setSelected(null);
+      setShowResult(false); // 실패 시 결과 화면 해제하여 재투표 가능
       setPendingChoice(null); // 실패 시 pendingChoice 정리
     }
   };
