@@ -138,9 +138,15 @@ export default function PollClient({
       const v = data.votes;
       const voteChanged = votes.A !== v.A || votes.B !== v.B;
       
-      // 방금 투표한 직후라면 애니메이션 업데이트 건너뛰기
-      if (justVotedRef.current && !voteChanged) {
+      // 방금 투표한 직후라면 전체 로직 건너뛰기 (userVote 처리까지 스킵)
+      if (justVotedRef.current) {
         setSynced(true);
+        
+        // 4초 후 플래그 해제 (2번의 폴링 주기)
+        setTimeout(() => {
+          justVotedRef.current = false;
+        }, 4000);
+        
         return;
       }
       
@@ -164,9 +170,6 @@ export default function PollClient({
         setPreviousPercentA(newPercentA);
         setPreviousPercentB(newPercentB);
       }
-      
-      // 방금 투표 플래그 해제
-      justVotedRef.current = false;
       
       // 질문 변경 체크
       const configRes = await fetch("/api/admin/today", { cache: "no-store" });
