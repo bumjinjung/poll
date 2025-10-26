@@ -506,11 +506,27 @@ export default function PollClient({
     
     navigator.vibrate?.(20);
     
-    // 낙관적 스냅샷으로 즉시 +1 표시 (상태 업데이트 전에 먼저 계산)
-    applyAnimatedSnapshot(votes, choice);
-    
-    // 즉시 UI 업데이트 (낙관적 업데이트) - flushSync로 즉시 적용
+    // 즉시 UI 업데이트 (낙관적 업데이트) - flushSync로 모든 상태를 동시에 업데이트
     flushSync(() => {
+      // 먼저 애니메이션 값 계산 및 설정
+      const nextA = votes.A + (choice === "A" ? 1 : 0);
+      const nextB = votes.B + (choice === "B" ? 1 : 0);
+      const nextTotal = nextA + nextB;
+      const nextPercentA = nextTotal ? Math.round((nextA / nextTotal) * 100) : 0;
+      const nextPercentB = nextTotal ? 100 - nextPercentA : 0;
+      
+      setAnimatedVotesA(nextA);
+      setAnimatedVotesB(nextB);
+      setAnimatedTotal(nextTotal);
+      setAnimatedPercentA(nextPercentA);
+      setAnimatedPercentB(nextPercentB);
+      setPreviousVotesA(nextA);
+      setPreviousVotesB(nextB);
+      setPreviousTotal(nextTotal);
+      setPreviousPercentA(nextPercentA);
+      setPreviousPercentB(nextPercentB);
+      
+      // UI 상태 업데이트
       setSelected(choice);
       setShowResult(true);
       setNumbersVisible(true);
