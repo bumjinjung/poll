@@ -25,12 +25,18 @@ export default function PollClient({
   const [showResult, setShowResult] = useState(false);
   const [synced, setSynced] = useState(false);
   const [isVisible, setIsVisible] = useState(false);
-  const [animatedPercentA, setAnimatedPercentA] = useState(0);
-  const [animatedPercentB, setAnimatedPercentB] = useState(0);
-  const [animatedVotesA, setAnimatedVotesA] = useState(0);
-  const [animatedVotesB, setAnimatedVotesB] = useState(0);
+  const [animatedPercentA, setAnimatedPercentA] = useState(() => {
+    const total = initialVotes.A + initialVotes.B;
+    return total > 0 ? Math.round((initialVotes.A / total) * 100) : 0;
+  });
+  const [animatedPercentB, setAnimatedPercentB] = useState(() => {
+    const total = initialVotes.A + initialVotes.B;
+    return total > 0 ? Math.round((initialVotes.B / total) * 100) : 0;
+  });
+  const [animatedVotesA, setAnimatedVotesA] = useState(initialVotes.A);
+  const [animatedVotesB, setAnimatedVotesB] = useState(initialVotes.B);
   const [isUpdating, setIsUpdating] = useState(false);
-  const [animatedTotal, setAnimatedTotal] = useState(0);
+  const [animatedTotal, setAnimatedTotal] = useState(initialVotes.A + initialVotes.B);
   const [previousTotal, setPreviousTotal] = useState(0);
   const [previousPercentA, setPreviousPercentA] = useState(0);
   const [previousPercentB, setPreviousPercentB] = useState(0);
@@ -54,6 +60,7 @@ export default function PollClient({
     const timer = setTimeout(() => setIsVisible(true), 100);
     return () => clearTimeout(timer);
   }, []);
+
 
   const total = (votes?.A || 0) + (votes?.B || 0);
   const percentA = total > 0 ? Math.round(((votes?.A || 0) / total) * 100) : 0;
@@ -83,6 +90,32 @@ export default function PollClient({
     
     requestAnimationFrame(animate);
   };
+
+  // 컴포넌트 내부 어딘가에 추가
+  const applyAnimatedSnapshot = useCallback((
+    base: VoteData,
+    extra?: "A" | "B"
+  ) => {
+    const nextA = base.A + (extra === "A" ? 1 : 0);
+    const nextB = base.B + (extra === "B" ? 1 : 0);
+    const nextTotal = nextA + nextB;
+    const nextPercentA = nextTotal ? Math.round((nextA / nextTotal) * 100) : 0;
+    const nextPercentB = nextTotal ? 100 - nextPercentA : 0;
+
+    // 즉시 화면에 숫자/퍼센트를 채움
+    setAnimatedVotesA(nextA);
+    setAnimatedVotesB(nextB);
+    setAnimatedTotal(nextTotal);
+    setAnimatedPercentA(nextPercentA);
+    setAnimatedPercentB(nextPercentB);
+
+    // 이후 변경 시에는 변화분만 애니메이션하도록 기준값도 맞춰둠
+    setPreviousVotesA(nextA);
+    setPreviousVotesB(nextB);
+    setPreviousTotal(nextTotal);
+    setPreviousPercentA(nextPercentA);
+    setPreviousPercentB(nextPercentB);
+  }, []);
 
   // 퍼센트 카운팅 애니메이션 (첫 로드 시) - requestAnimationFrame 사용
   useEffect(() => {
@@ -346,7 +379,13 @@ export default function PollClient({
     fetchVotes();
   }, [config?.question]);
 
-  const fetchVotes = async () => {
+  useEffect(() => {
+    if (selected && animatedTotal === 0) {
+      applyAnimatedSnapshot(votes); // 현재 표 기준으로 즉시 채움
+    }
+  }, [selected, votes, animatedTotal, applyAnimatedSnapshot]);
+
+  const fetchVotes = useCallback(async () => {
     try {
       setIsUpdating(true);
       const res = await fetch("/api/vote", { cache: "no-store" });
@@ -399,23 +438,50 @@ export default function PollClient({
     finally {
       setTimeout(() => setIsUpdating(false), 300);
     }
-  };
+  }, []);
+
+  // ✅ 클라이언트에서만 localStorage 읽기 (Hydration 오류 방지)
+  useEffect(() => {
+    if (!config?.question) return;
+    try {
+      const raw = localStorage.getItem(`poll-voted-${config.question}`);
+      if (raw) {
+        const parsed = JSON.parse(raw) as { selected?: "A" | "B" };
+        if (parsed?.selected) {
+          setSelected(parsed.selected);
+          setShowResult(true);
+          setSynced(false);
+          // 로컬스토리지에서 읽은 후 서버와 동기화
+          fetchVotes();
+          return;
+        }
+      }
+    } catch {}
+    setSelected(null);
+    setShowResult(false);
+    setSynced(false);
+    // 로컬스토리지에 없으면 서버에서 확인
+    fetchVotes();
+  }, [config?.question, fetchVotes]);
 
   const handleVote = async (choice: "A" | "B") => {
     if (showResult) return;
-    
-    // 모바일 진동 추가
+
     navigator.vibrate?.(20);
-    
-    // 즉시 선택 상태 설정 (깜빡임 방지 및 중복 투표 방지)
     setPendingChoice(choice);
     setSelected(choice);
-    setShowResult(true); // 즉시 결과 화면으로 전환하여 중복 투표 방지
-    
+
+    // ✅ 여기! 0이 보이지 않도록 즉시 현재표 + 내 선택 1표 스냅샷을 채웁니다.
+    applyAnimatedSnapshot(votes, choice);
+
+    setShowResult(true);            // 결과 화면 전환
+    setSynced(false);               // 서버 동기화 전 상태
+
     // 투표 효과 트리거
     setVoteEffect(choice);
     setTimeout(() => setVoteEffect(null), 600); // 0.6초 후 효과 제거
-    
+
+    // 이후 서버 POST는 그대로 유지
     try {
       const res = await fetch("/api/vote", {
         method: "POST",
@@ -425,25 +491,19 @@ export default function PollClient({
       const data = await res.json();
       if (data.success) {
         setVotes(data.votes);
-        setTimeout(() => {
-          setSynced(true);
-          setShowResult(true);
-          localStorage.setItem(storageKey, JSON.stringify({ selected: choice }));
-          setPendingChoice(null); // 성공 시 pendingChoice 정리
-        }, 400);
+        setSynced(true);
+        localStorage.setItem(storageKey, JSON.stringify({ selected: choice }));
+        setPendingChoice(null);
       } else {
-        // 서버에서 중복 투표 감지 - 알림 대신 결과 표시
         setVotes(data.votes);
         setSynced(true);
-        setShowResult(true);
-        setPendingChoice(null); // 중복 투표 시에도 pendingChoice 정리
-        // 이미 투표한 경우이므로 로컬 스토리지에 저장하지 않음
+        setPendingChoice(null);
       }
     } catch {
       alert("투표에 실패했습니다. 다시 시도해주세요.");
       setSelected(null);
-      setShowResult(false); // 실패 시 결과 화면 해제하여 재투표 가능
-      setPendingChoice(null); // 실패 시 pendingChoice 정리
+      setShowResult(false);
+      setPendingChoice(null);
     }
   };
 
