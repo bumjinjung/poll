@@ -89,7 +89,7 @@ export default function PollClient({
   // 결과 블록은 한번 열리면 유지 (조건 단순화)
   const canShowStats = showResult;
   
-  const showNumbers = showResult && (numbersVisible || pendingChoice !== null);
+  const showNumbers = showResult && numbersVisible;
 
   // ===== 등장 애니메이션 =====
   useEffect(() => {
@@ -506,15 +506,18 @@ export default function PollClient({
     
     navigator.vibrate?.(20);
     
-    // 즉시 UI 업데이트 (낙관적 업데이트)
-    setSelected(choice);
-    setShowResult(true);
-    setNumbersVisible(true);
+    // 낙관적 스냅샷으로 즉시 +1 표시 (상태 업데이트 전에 먼저 계산)
+    applyAnimatedSnapshot(votes, choice);
+    
+    // 즉시 UI 업데이트 (낙관적 업데이트) - flushSync로 즉시 적용
+    flushSync(() => {
+      setSelected(choice);
+      setShowResult(true);
+      setNumbersVisible(true);
+    });
+    
     hasVotedRef.current = choice;
     hasShownResultRef.current = true;
-    
-    // 낙관적 스냅샷으로 즉시 +1 표시
-    applyAnimatedSnapshot(votes, choice);
     
     // 투표 효과
     setVoteEffect(choice);
