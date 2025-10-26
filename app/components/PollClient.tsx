@@ -139,19 +139,6 @@ export default function PollClient({
       const voteChanged = votes.A !== v.A || votes.B !== v.B;
       
       setVotes(v);
-      
-      // 방금 투표한 직후라면 나머지 로직 건너뛰기
-      if (justVotedRef.current) {
-        setSynced(true);
-        
-        // 4초 후 플래그 해제 (2번의 폴링 주기)
-        setTimeout(() => {
-          justVotedRef.current = false;
-        }, 4000);
-        
-        return;
-      }
-      
       setSynced(true);
 
       // 애니메이션 값 업데이트 (값이 변경되었거나 첫 로드일 때)
@@ -159,7 +146,8 @@ export default function PollClient({
       const newPercentA = newTotal ? Math.round((v.A / newTotal) * 100) : 0;
       const newPercentB = newTotal ? 100 - newPercentA : 0;
       
-      if (voteChanged || animatedTotal === 0) {
+      // 방금 투표한 직후가 아니거나, 값이 변경되었거나, 첫 로드일 때 애니메이션 업데이트
+      if (!justVotedRef.current || voteChanged || animatedTotal === 0) {
         setAnimatedVotesA(v.A);
         setAnimatedVotesB(v.B);
         setAnimatedTotal(newTotal);
@@ -170,6 +158,16 @@ export default function PollClient({
         setPreviousTotal(newTotal);
         setPreviousPercentA(newPercentA);
         setPreviousPercentB(newPercentB);
+      }
+      
+      // 방금 투표한 직후라면 userVote 처리 건너뛰기
+      if (justVotedRef.current) {
+        // 4초 후 플래그 해제 (2번의 폴링 주기)
+        setTimeout(() => {
+          justVotedRef.current = false;
+        }, 4000);
+        
+        return;
       }
       
       // 질문 변경 체크
