@@ -63,7 +63,6 @@ export default function PollClient({
   const bcRef = useRef<BroadcastChannel | null>(null);
   const hasShownResultRef = useRef(false);
   const hasVotedRef = useRef<"A" | "B" | null>(null);
-  const justVotedRef = useRef(false); // 방금 투표했는지 추적
 
   const storageKey = useMemo(
     () => `poll-voted-${config?.question || ""}`,
@@ -146,8 +145,7 @@ export default function PollClient({
       const newPercentA = newTotal ? Math.round((v.A / newTotal) * 100) : 0;
       const newPercentB = newTotal ? 100 - newPercentA : 0;
       
-      // 방금 투표한 직후가 아니거나, 값이 변경되었거나, 첫 로드일 때 애니메이션 업데이트
-      if (!justVotedRef.current || voteChanged || animatedTotal === 0) {
+      if (voteChanged || animatedTotal === 0) {
         setAnimatedVotesA(v.A);
         setAnimatedVotesB(v.B);
         setAnimatedTotal(newTotal);
@@ -158,27 +156,6 @@ export default function PollClient({
         setPreviousTotal(newTotal);
         setPreviousPercentA(newPercentA);
         setPreviousPercentB(newPercentB);
-      }
-      
-      // 방금 투표한 직후라면 userVote 처리 건너뛰기
-      if (justVotedRef.current) {
-        // 4초 후 플래그 해제 (2번의 폴링 주기)
-        setTimeout(() => {
-          justVotedRef.current = false;
-        }, 4000);
-        
-        return;
-      }
-      
-      // 질문 변경 체크
-      const configRes = await fetch("/api/admin/today", { cache: "no-store" });
-      const configData = await configRes.json();
-      if (configData?.success && configData?.data) {
-        const newConfig = configData.data;
-        if (config && config.question !== newConfig.question) {
-          // 질문이 변경됨
-          setConfig(newConfig);
-        }
       }
 
       if (data.userVote) {
@@ -217,17 +194,17 @@ export default function PollClient({
     }
   }, [config?.question, votes.A, votes.B, animatedTotal]);
 
-  // ===== 2초 간격 폴링 =====
+  // ===== 5초 간격 폴링 (투표 결과만) =====
   useEffect(() => {
     // 초기 로드
     fetchVotesAndConfig();
 
-    // 2초마다 폴링
+    // 5초마다 폴링
     pollIntervalRef.current = setInterval(() => {
       if (!document.hidden) {
         fetchVotesAndConfig();
       }
-    }, 2000);
+    }, 5000);
 
     // 이벤트 리스너
     const onFocus = () => fetchVotesAndConfig();
@@ -291,7 +268,6 @@ export default function PollClient({
       hasShownResultRef.current = false;
       hasVotedRef.current = null;
       setNumbersVisible(false);
-      justVotedRef.current = false;
       hasInitializedRef.current = false;
 
       fetchVotesAndConfig();
@@ -332,35 +308,9 @@ export default function PollClient({
     
     navigator.vibrate?.(20);
     
-    // 방금 투표했음을 표시
-    justVotedRef.current = true;
-    
-    // 즉시 UI 업데이트 (낙관적 업데이트)
-    flushSync(() => {
-      const nextA = votes.A + (choice === "A" ? 1 : 0);
-      const nextB = votes.B + (choice === "B" ? 1 : 0);
-      const nextTotal = nextA + nextB;
-      const nextPercentA = nextTotal ? Math.round((nextA / nextTotal) * 100) : 0;
-      const nextPercentB = nextTotal ? 100 - nextPercentA : 0;
-      
-      setAnimatedVotesA(nextA);
-      setAnimatedVotesB(nextB);
-      setAnimatedTotal(nextTotal);
-      setAnimatedPercentA(nextPercentA);
-      setAnimatedPercentB(nextPercentB);
-      setPreviousVotesA(nextA);
-      setPreviousVotesB(nextB);
-      setPreviousTotal(nextTotal);
-      setPreviousPercentA(nextPercentA);
-      setPreviousPercentB(nextPercentB);
-      
+    // 투표 중 표시
     setSelected(choice);
-      setShowResult(true);
-      setNumbersVisible(true);
-    });
-    
-    hasVotedRef.current = choice;
-    hasShownResultRef.current = true;
+    setShowResult(true);
     
     // 투표 효과
     setVoteEffect(choice);
@@ -375,25 +325,28 @@ export default function PollClient({
       const data = await res.json();
       
       if (data.success && data.votes) {
-        // 서버 응답으로 실제 값 업데이트
-        const serverA = data.votes.A;
-        const serverB = data.votes.B;
+        // 서버 응답으로 상태 업데이트
+        setVotes(data.votes);
+        setSelected(choice);
+        hasVotedRef.current = choice;
+        hasShownResultRef.current = true;
         
-        // votes 상태는 항상 서버 값으로 동기화
-        setVotes({ A: serverA, B: serverB });
+        // 애니메이션 값 업데이트
+        const tot = data.votes.A + data.votes.B;
+        const pA = tot ? Math.round((data.votes.A / tot) * 100) : 0;
+        const pB = tot ? 100 - pA : 0;
         
-        // 서버에서 userVote 확인 (재검증)
-        const verifyRes = await fetch("/api/vote", { cache: "no-store" });
-        const verifyData = await verifyRes.json();
-        
-        if (verifyData.success && verifyData.userVote) {
-          // 서버가 확인한 실제 투표 선택으로 업데이트
-          if (verifyData.userVote !== choice) {
-            console.warn(`투표 불일치 감지: 클라이언트=${choice}, 서버=${verifyData.userVote}`);
-            setSelected(verifyData.userVote);
-            hasVotedRef.current = verifyData.userVote;
-          }
-        }
+        setAnimatedVotesA(data.votes.A);
+        setAnimatedVotesB(data.votes.B);
+        setAnimatedTotal(tot);
+        setAnimatedPercentA(pA);
+        setAnimatedPercentB(pB);
+        setPreviousVotesA(data.votes.A);
+        setPreviousVotesB(data.votes.B);
+        setPreviousTotal(tot);
+        setPreviousPercentA(pA);
+        setPreviousPercentB(pB);
+        setNumbersVisible(true);
         
         try {
           localStorage.setItem(storageKey, JSON.stringify({ selected: choice }));
@@ -404,35 +357,20 @@ export default function PollClient({
           bcRef.current.postMessage({ type: "vote_update_hint" });
         } catch {}
       } else {
-        // 서버가 성공을 반환하지 않으면 되돌리기
         throw new Error("Server returned unsuccessful response");
       }
     } catch (error) {
       console.error("투표 실패:", error);
-      alert("투표에 실패했습니다. 다시 시도해주세요.");
       
-      // 실패 시 완전 초기화 후 서버 상태 다시 확인
+      // 실패 시 초기화
       setSelected(null);
       setShowResult(false);
       setNumbersVisible(false);
       hasVotedRef.current = null;
       hasShownResultRef.current = false;
-      justVotedRef.current = false;
       
-      // 서버에서 실제 상태 가져오기
-      try {
-        const recoverRes = await fetch("/api/vote", { cache: "no-store" });
-        const recoverData = await recoverRes.json();
-        if (recoverData.success) {
-          setVotes(recoverData.votes);
-          if (recoverData.userVote) {
-            setSelected(recoverData.userVote);
-            setShowResult(true);
-            hasVotedRef.current = recoverData.userVote;
-            hasShownResultRef.current = true;
-          }
-        }
-      } catch {}
+      // 서버 상태 확인
+      fetchVotesAndConfig();
     }
   };
 
