@@ -87,6 +87,17 @@ export default function PollClient({
   // 퍼센트 카운팅 애니메이션 (첫 로드 시) - requestAnimationFrame 사용
   useEffect(() => {
     if (showResult && synced && previousPercentA === 0) {
+      // 이미 투표한 사용자의 경우 애니메이션 건너뛰기 (즉시 표시)
+      if (selected) {
+        // 이미 fetchVotes에서 애니메이션 값이 설정되었으므로 애니메이션 없이 이전 값만 저장
+        setPreviousPercentA(percentA);
+        setPreviousPercentB(percentB);
+        setPreviousVotesA(votes?.A || 0);
+        setPreviousVotesB(votes?.B || 0);
+        setPreviousTotal(total);
+        return;
+      }
+      
       const duration = 1500; // 1.5초
       const startTime = performance.now();
       
@@ -122,7 +133,7 @@ export default function PollClient({
       setPreviousVotesB(votes?.B || 0);
       setPreviousTotal(total);
     }
-  }, [showResult, synced, percentA, percentB, votes?.A, votes?.B, total, previousPercentA]);
+  }, [showResult, synced, percentA, percentB, votes?.A, votes?.B, total, previousPercentA, selected]);
 
   // 업데이트 감지 시 개별 애니메이션
   useEffect(() => {
