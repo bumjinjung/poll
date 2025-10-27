@@ -6,6 +6,13 @@ import Link from "next/link";
 const ANIM_MS = 1000; // 투표 시 애니메이션 시간 (천천히)
 const REVEAL_DELAY = 0; // 즉시 표시
 
+// 전역 타입 선언
+declare global {
+  interface Window {
+    __POLL_VOTED__?: boolean;
+  }
+}
+
 type TwoChoicePollConfig = {
   id: string;
   question: string;
@@ -26,7 +33,13 @@ export default function PollClient({
   const [config, setConfig] = useState<TwoChoicePollConfig | null>(initialConfig);
   const [votes, setVotes] = useState<VoteData>(initialVotes);
   const [selected, setSelected] = useState<"A" | "B" | null>(null);
-  const [showResult, setShowResult] = useState(false);
+  const [showResult, setShowResult] = useState(() => {
+    // beforeInteractive 스크립트에서 설정한 전역 변수 읽기
+    if (typeof window !== 'undefined' && window.__POLL_VOTED__) {
+      return true;
+    }
+    return false;
+  });
   const [synced, setSynced] = useState(false);
   const [isVisible, setIsVisible] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
@@ -34,7 +47,13 @@ export default function PollClient({
   // ===== 애니메이션 제어 =====
   const [animationKey, setAnimationKey] = useState(0);
   const [isAnimating, setIsAnimating] = useState(false);
-  const [numbersOpacity, setNumbersOpacity] = useState(0);
+  const [numbersOpacity, setNumbersOpacity] = useState(() => {
+    // 이미 투표한 상태면 숫자도 바로 표시
+    if (typeof window !== 'undefined' && window.__POLL_VOTED__) {
+      return 1;
+    }
+    return 0;
+  });
   const [fillPlayed, setFillPlayed] = useState(false); // 애니메이션이 한 번 실행되었는지 추적
 
   // 애니메이션용 숫자
@@ -243,6 +262,11 @@ export default function PollClient({
         setShowResult(false);
         setSynced(false);
         setNumbersOpacity(0);
+        
+        // 투표하지 않은 상태이므로 latest도 제거
+        try {
+          localStorage.removeItem('poll:voted:latest');
+        } catch {}
       }
     } finally {
       isFetchingRef.current = false;
@@ -329,6 +353,11 @@ export default function PollClient({
       setAnimationKey(0);
       setIsAnimating(false);
       setFillPlayed(false); // 애니메이션 플래그 초기화
+      
+      // 질문 변경 시 투표 상태 초기화
+      try {
+        localStorage.removeItem('poll:voted:latest');
+      } catch {}
 
       fetchVotesAndConfig();
     } else if (!prevQuestionRef.current) {
@@ -454,6 +483,7 @@ export default function PollClient({
         try {
           if (config?.id) {
             localStorage.setItem(`poll:voted:${config.id}`, '1');
+            localStorage.setItem('poll:voted:latest', '1'); // 최신 투표 상태 저장
           }
         } catch {}
         
@@ -502,6 +532,7 @@ export default function PollClient({
       try {
         if (config?.id) {
           localStorage.removeItem(`poll:voted:${config.id}`);
+          localStorage.removeItem('poll:voted:latest');
         }
       } catch {}
       
@@ -590,7 +621,7 @@ export default function PollClient({
           </h2>
         </div>
 
-        <div className="flex items-center justify-center gap-3 sm:gap-4">
+        <div className="poll-choices-initial flex items-center justify-center gap-3 sm:gap-4">
           {/* A */}
           <button
             onClick={() => handleVote("A")}
