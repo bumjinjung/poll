@@ -29,7 +29,35 @@ async function getUserId(): Promise<string> {
 // 투표하기
 export async function POST(req: Request) {
   try {
-    const { choice } = await req.json();
+    // Content-Type 확인
+    const contentType = req.headers.get("content-type");
+    if (!contentType || !contentType.includes("application/json")) {
+      return NextResponse.json(
+        { success: false, message: "Content-Type must be application/json" },
+        { status: 400 }
+      );
+    }
+
+    // body가 비어있는지 확인
+    const text = await req.text();
+    if (!text || text.trim() === "") {
+      return NextResponse.json(
+        { success: false, message: "Request body is empty" },
+        { status: 400 }
+      );
+    }
+
+    let choice: string;
+    try {
+      const body = JSON.parse(text);
+      choice = body.choice;
+    } catch (parseError) {
+      console.error("JSON parse error:", parseError, "Body:", text);
+      return NextResponse.json(
+        { success: false, message: "Invalid JSON format" },
+        { status: 400 }
+      );
+    }
 
     if (choice !== "A" && choice !== "B") {
       return NextResponse.json(

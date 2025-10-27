@@ -7,6 +7,15 @@ import { flushSync } from "react-dom";
 const ANIM_MS = 1000; // 투표 시 애니메이션 시간 (천천히)
 const REVEAL_DELAY = 0; // 즉시 표시
 
+// 쿠키에서 특정 값 읽기
+function getCookie(name: string): string | null {
+  if (typeof document === 'undefined') return null;
+  const value = `; ${document.cookie}`;
+  const parts = value.split(`; ${name}=`);
+  if (parts.length === 2) return parts.pop()?.split(';').shift() || null;
+  return null;
+}
+
 type TwoChoicePollConfig = {
   id: string;
   question: string;
@@ -23,18 +32,21 @@ export default function PollClient({
   initialConfig: TwoChoicePollConfig | null;
   initialVotes: VoteData;
 }) {
+  // 쿠키 확인 - 투표한 사용자면 optimistic하게 결과 표시
+  const hasUserCookie = getCookie('poll_user_id') !== null;
+  
   // ===== 기본 상태 =====
   const [config, setConfig] = useState<TwoChoicePollConfig | null>(initialConfig);
   const [votes, setVotes] = useState<VoteData>(initialVotes);
   const [selected, setSelected] = useState<"A" | "B" | null>(null);
   const [pendingChoice, setPendingChoice] = useState<"A" | "B" | null>(null);
-  const [showResult, setShowResult] = useState(false);
+  const [showResult, setShowResult] = useState(hasUserCookie); // 쿠키 있으면 바로 결과 표시
   const [synced, setSynced] = useState(false);
   const [isVisible, setIsVisible] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
 
   // 숫자/텍스트 표시 타이밍(색 채움과 싱크)
-  const [numbersVisible, setNumbersVisible] = useState(false);
+  const [numbersVisible, setNumbersVisible] = useState(hasUserCookie); // 쿠키 있으면 바로 표시
 
   // 애니메이션용 숫자 (SSR과 일치)
   const [animatedPercentA, setAnimatedPercentA] = useState(() => {
@@ -59,11 +71,12 @@ export default function PollClient({
   const [questionKey, setQuestionKey] = useState(0);
   const [voteEffect, setVoteEffect] = useState<"A" | "B" | null>(null);
   const [isJustVoted, setIsJustVoted] = useState(false); // 지금 막 투표했는지 여부
+  const [fillPlayed, setFillPlayed] = useState(false); // 이번 투표의 fill 애니메이션을 이미 실행했는가
 
   // Refs
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const bcRef = useRef<BroadcastChannel | null>(null);
-  const hasShownResultRef = useRef(false);
+  const hasShownResultRef = useRef(hasUserCookie); // 쿠키 있으면 이미 결과 본 것으로 처리
   const hasVotedRef = useRef<"A" | "B" | null>(null);
   const isVotingInProgressRef = useRef(false); // 애니메이션 진행 중 쿨다운
 
@@ -150,7 +163,24 @@ export default function PollClient({
       const newPercentA = newTotal ? Math.round((v.A / newTotal) * 100) : 0;
       const newPercentB = newTotal ? 100 - newPercentA : 0;
       
-      if (voteChanged || animatedTotal === 0) {
+      if (voteChanged) {
+        // 폴링으로 값이 변경되면 카운팅 애니메이션 실행
+        animateDigitChange(animatedVotesA, v.A, setAnimatedVotesA);
+        animateDigitChange(animatedVotesB, v.B, setAnimatedVotesB);
+        animateDigitChange(animatedTotal, newTotal, setAnimatedTotal);
+        animateDigitChange(animatedPercentA, newPercentA, setAnimatedPercentA);
+        animateDigitChange(animatedPercentB, newPercentB, setAnimatedPercentB);
+        
+        // 애니메이션 완료 후 이전 값 업데이트
+        setTimeout(() => {
+          setPreviousVotesA(v.A);
+          setPreviousVotesB(v.B);
+          setPreviousTotal(newTotal);
+          setPreviousPercentA(newPercentA);
+          setPreviousPercentB(newPercentB);
+        }, ANIM_MS);
+      } else if (animatedTotal === 0) {
+        // 첫 로드는 즉시 값 설정 (애니메이션 없음)
         setAnimatedVotesA(v.A);
         setAnimatedVotesB(v.B);
         setAnimatedTotal(newTotal);
@@ -269,6 +299,7 @@ export default function PollClient({
       setNumbersVisible(false);
       hasInitializedRef.current = false;
       setIsJustVoted(false);
+      setFillPlayed(false);
 
       fetchVotesAndConfig();
     } else if (!prevQuestionRef.current) {
@@ -294,11 +325,12 @@ export default function PollClient({
     // 애니메이션 진행 중 플래그 설정 (쿨다운 시작)
     isVotingInProgressRef.current = true;
     
-    // 투표 중 표시
+    // 투표 직후 UI 세팅
     setSelected(choice);
     setShowResult(true);
-    setIsJustVoted(true); // 지금 막 투표했음을 표시
-    setNumbersVisible(false); // 숫자는 일단 숨김
+    setIsJustVoted(true);
+    setNumbersVisible(false);
+    setFillPlayed(false); // 이번 투표에서 아직 한 번도 실행 안 함
     
     // 투표 효과
     setVoteEffect(choice);
@@ -324,28 +356,26 @@ export default function PollClient({
         const pA = tot ? Math.round((data.votes.A / tot) * 100) : 0;
         const pB = tot ? 100 - pA : 0;
         
-        // 애니메이션 시작 - 이전 값에서 새 값으로
-        setTimeout(() => {
-          animateDigitChange(animatedVotesA, data.votes.A, setAnimatedVotesA);
-          animateDigitChange(animatedVotesB, data.votes.B, setAnimatedVotesB);
-          animateDigitChange(animatedTotal, tot, setAnimatedTotal);
-          animateDigitChange(animatedPercentA, pA, setAnimatedPercentA);
-          animateDigitChange(animatedPercentB, pB, setAnimatedPercentB);
-          
-          // 애니메이션 후 이전 값 업데이트
-          setTimeout(() => {
-            setPreviousVotesA(data.votes.A);
-            setPreviousVotesB(data.votes.B);
-            setPreviousTotal(tot);
-            setPreviousPercentA(pA);
-            setPreviousPercentB(pB);
-          }, ANIM_MS);
-        }, 100);
+        // 투표 시에는 카운팅 애니메이션 없이 즉시 최종 값으로 설정
+        setAnimatedVotesA(data.votes.A);
+        setAnimatedVotesB(data.votes.B);
+        setAnimatedTotal(tot);
+        setAnimatedPercentA(pA);
+        setAnimatedPercentB(pB);
+        setPreviousVotesA(data.votes.A);
+        setPreviousVotesB(data.votes.B);
+        setPreviousTotal(tot);
+        setPreviousPercentA(pA);
+        setPreviousPercentB(pB);
         
-        // 숫자 표시 (색 채우기 애니메이션 완료 후)
-        setTimeout(() => {
-          setNumbersVisible(true);
-        }, ANIM_MS);
+        // 숫자는 애니메이션과 동시에 즉시 표시
+        setNumbersVisible(true);
+        
+        // 애니가 "한 번"만 실행되도록: 렌더가 붙은 다음에 종료 시점에 플래그 세팅
+        requestAnimationFrame(() => {
+          // 애니가 끝난 뒤에만 fillPlayed=true (이후 re-render에서 애니 재적용 방지)
+          setTimeout(() => setFillPlayed(true), ANIM_MS + 20);
+        });
         
         // 애니메이션 완료 후 상태 초기화 및 쿨다운 해제
         setTimeout(() => {
@@ -370,6 +400,7 @@ export default function PollClient({
       hasVotedRef.current = null;
       hasShownResultRef.current = false;
       setIsJustVoted(false);
+      setFillPlayed(false);
       isVotingInProgressRef.current = false; // 쿨다운 해제
       
       // 서버 상태 확인
@@ -394,6 +425,8 @@ export default function PollClient({
     bcRef.current = bc;
 
     bc.onmessage = (event) => {
+      if (isVotingInProgressRef.current) return; // 애니 중엔 무시
+      
       if (event.data.type === "config_update") {
         forceRefreshConfig();
       }
@@ -479,12 +512,11 @@ export default function PollClient({
             {isAActive && (
               <div
                 className="absolute inset-0 z-[2] bg-gradient-to-br from-blue-500 to-blue-600"
-                style={isJustVoted ? { 
-                  animation: `fillUp ${ANIM_MS}ms cubic-bezier(0.4, 0, 0.2, 1) forwards`,
-                  transformOrigin: 'bottom'
-                } : { 
-                  opacity: 1
-                }}
+                style={
+                  isJustVoted && !fillPlayed
+                    ? { animation: `fillUp ${ANIM_MS}ms cubic-bezier(0.4, 0, 0.2, 1) forwards`, transformOrigin: 'bottom' }
+                    : { opacity: 1 }
+                }
               />
             )}
             <div className={`relative z-[10] h-full flex flex-col items-center p-3 sm:p-4 gap-1 sm:gap-2 ${
@@ -547,12 +579,11 @@ export default function PollClient({
             {isBActive && (
               <div
                 className="absolute inset-0 z-[2] bg-gradient-to-br from-purple-500 to-purple-600"
-                style={isJustVoted ? { 
-                  animation: `fillUp ${ANIM_MS}ms cubic-bezier(0.4, 0, 0.2, 1) forwards`,
-                  transformOrigin: 'bottom'
-                } : { 
-                  opacity: 1
-                }}
+                style={
+                  isJustVoted && !fillPlayed
+                    ? { animation: `fillUp ${ANIM_MS}ms cubic-bezier(0.4, 0, 0.2, 1) forwards`, transformOrigin: 'bottom' }
+                    : { opacity: 1 }
+                }
               />
             )}
             <div className={`relative z-[10] h-full flex flex-col items-center p-3 sm:p-4 gap-1 sm:gap-2 ${
