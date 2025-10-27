@@ -65,6 +65,7 @@ export default function PollClient({
   const bcRef = useRef<BroadcastChannel | null>(null);
   const hasShownResultRef = useRef(false);
   const hasVotedRef = useRef<"A" | "B" | null>(null);
+  const isVotingInProgressRef = useRef(false); // 애니메이션 진행 중 쿨다운
 
   // localStorage 제거 - 서버 응답만 신뢰
 
@@ -125,6 +126,11 @@ export default function PollClient({
 
   // ===== 서버 통신 =====
   const fetchVotesAndConfig = useCallback(async () => {
+    // 애니메이션 진행 중에는 서버 갱신 무시 (쿨다운)
+    if (isVotingInProgressRef.current) {
+      return;
+    }
+    
     try {
       setIsUpdating(true);
       
@@ -285,6 +291,9 @@ export default function PollClient({
     
     navigator.vibrate?.(20);
     
+    // 애니메이션 진행 중 플래그 설정 (쿨다운 시작)
+    isVotingInProgressRef.current = true;
+    
     // 투표 중 표시
     setSelected(choice);
     setShowResult(true);
@@ -334,11 +343,14 @@ export default function PollClient({
         }, 100);
         
         // 숫자 표시 (색 채우기 애니메이션 완료 후)
-        setTimeout(() => setNumbersVisible(true), ANIM_MS - 200);
+        setTimeout(() => {
+          setNumbersVisible(true);
+        }, ANIM_MS);
         
-        // 애니메이션 완료 후 isJustVoted 해제
+        // 애니메이션 완료 후 상태 초기화 및 쿨다운 해제
         setTimeout(() => {
           setIsJustVoted(false);
+          isVotingInProgressRef.current = false; // 쿨다운 종료
         }, ANIM_MS + 100);
         
         try {
@@ -358,6 +370,7 @@ export default function PollClient({
       hasVotedRef.current = null;
       hasShownResultRef.current = false;
       setIsJustVoted(false);
+      isVotingInProgressRef.current = false; // 쿨다운 해제
       
       // 서버 상태 확인
       fetchVotesAndConfig();
