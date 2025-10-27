@@ -206,6 +206,7 @@ export default function AdminPage() {
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const sentinelRef = useRef<HTMLDivElement | null>(null);
+  const [resetVotes, setResetVotes] = useState(false); // 투표 초기화 체크박스
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -336,7 +337,7 @@ export default function AdminPage() {
         },
         body: JSON.stringify({ 
           ...config, 
-          resetVotesFlag: isTomorrow ? false : false, // 질문 수정 시에는 항상 투표 결과 유지
+          resetVotesFlag: isTomorrow ? false : resetVotes, // 오늘 질문: 체크박스 값 사용, 내일 질문: 항상 false
           isTomorrow
         }),
       });
@@ -359,6 +360,9 @@ export default function AdminPage() {
             setMessage(null);
             setIsFadingOut(false);
           }, 3500);
+          
+          // 체크박스 초기화
+          setResetVotes(false);
           
           // 브라우저 전체에 즉시 반영
           const bc = new BroadcastChannel("poll_channel");
@@ -684,6 +688,7 @@ export default function AdminPage() {
                 setActiveTab("today");
                 setMessage(null);
                 setIsFadingOut(false);
+                setResetVotes(false);
               }}
               className={`flex-1 px-2 rounded-lg text-xs font-semibold flex items-center justify-center ${
                 activeTab === "today"
@@ -700,6 +705,7 @@ export default function AdminPage() {
                 setActiveTab("tomorrow");
                 setMessage(null);
                 setIsFadingOut(false);
+                setResetVotes(false);
               }}
               className={`flex-1 px-2 rounded-lg text-xs font-semibold relative flex items-center justify-center ${
                 activeTab === "tomorrow"
@@ -719,6 +725,7 @@ export default function AdminPage() {
                 setActiveTab("history");
                 setMessage(null);
                 setIsFadingOut(false);
+                setResetVotes(false);
               }}
               className={`flex-1 px-2 rounded-lg text-xs font-semibold flex items-center justify-center ${
                 activeTab === "history"
@@ -786,6 +793,7 @@ export default function AdminPage() {
                   />
                 </div>
               </div>
+              
               {/* 버튼 */}
               <div className="flex gap-2 pt-2">
                 <button
@@ -835,8 +843,19 @@ export default function AdminPage() {
 
               {/* 오늘/내일 Poll 하단 정보 */}
               {activeTab === "today" ? (
-                <div className="px-2 flex items-center justify-center" style={{ height: '40px' }}>
+                <div className="px-2 flex items-center justify-between" style={{ height: '40px' }}>
                   <span className="text-xs text-gray-600">투표: A {currentVotes.A} · B {currentVotes.B}</span>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={resetVotes}
+                      onChange={(e) => setResetVotes(e.target.checked)}
+                      className="w-4 h-4 text-red-600 bg-gray-100 border-gray-300 rounded focus:ring-red-500 focus:ring-2 cursor-pointer"
+                    />
+                    <span className="text-xs text-gray-600 select-none">
+                      투표 초기화
+                    </span>
+                  </label>
                 </div>
               ) : (
                 <div className="px-2 flex items-center justify-center" style={{ height: '40px' }}>
