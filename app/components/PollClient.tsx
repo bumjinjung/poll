@@ -74,6 +74,7 @@ export default function PollClient({
   const prevQuestionRef = useRef<string | null>(null);
   const senderIdRef = useRef<string>(crypto.randomUUID()); // 자신의 메시지 구분용
   const latestVotesRef = useRef(votes); // 최신 votes 값 저장
+  const animationFrameIds = useRef<number[]>([]); // 진행 중인 애니메이션 프레임 ID들
 
   // 최신 votes 값 동기화
   useEffect(() => { 
@@ -91,17 +92,28 @@ export default function PollClient({
     return () => clearTimeout(t);
   }, []);
 
+  // ===== 모든 진행 중인 숫자 애니메이션 취소 =====
+  const cancelAllAnimations = () => {
+    animationFrameIds.current.forEach(id => cancelAnimationFrame(id));
+    animationFrameIds.current = [];
+  };
+
   // ===== 숫자 애니메이션 유틸 =====
   const animateDigitChange = (from: number, to: number, setter: (n: number) => void) => {
     if (from === to) return;
     const start = performance.now();
+    let frameId: number;
     const step = (t: number) => {
       const p = Math.min((t - start) / ANIM_MS, 1);
       const eased = 1 - Math.pow(1 - p, 3);
       setter(Math.round(from + (to - from) * eased));
-      if (p < 1) requestAnimationFrame(step);
+      if (p < 1) {
+        frameId = requestAnimationFrame(step);
+        animationFrameIds.current.push(frameId);
+      }
     };
-    requestAnimationFrame(step);
+    frameId = requestAnimationFrame(step);
+    animationFrameIds.current.push(frameId);
   };
 
   // ===== 애니메이션 완료 핸들러 (개선됨) =====
@@ -267,6 +279,9 @@ export default function PollClient({
     
     navigator.vibrate?.(20);
     
+    // 진행 중인 모든 숫자 카운팅 애니메이션 즉시 취소
+    cancelAllAnimations();
+    
     // 애니메이션 진행 중 플래그 설정
     isVotingInProgressRef.current = true;
     setIsAnimating(true);
@@ -309,8 +324,12 @@ export default function PollClient({
         setAnimatedPercentA(pA);
         setAnimatedPercentB(pB);
         
-        // 숫자는 애니메이션과 동시에 표시
-        setNumbersOpacity(1);
+        // 숫자를 먼저 DOM에 반영한 후 다음 프레임에 표시 (애니메이션 방지)
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            setNumbersOpacity(1);
+          });
+        });
         
         try {
           if (!bcRef.current) bcRef.current = new BroadcastChannel("poll_channel");
