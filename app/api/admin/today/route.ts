@@ -9,6 +9,7 @@ import {
   deleteTomorrowPoll,
   checkAndPromoteTomorrowPoll
 } from "@/lib/kv";
+import crypto from "crypto";
 
 // 완전 비캐시 처리
 export const dynamic = "force-dynamic";
@@ -103,7 +104,25 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // 기존 poll이 있으면 ID 유지, 없으면 새로 생성
+    const existingPoll = await getPollData();
+    let pollId: string;
+    
+    if (existingPoll && existingPoll.id) {
+      // 기존 poll ID 유지 (질문 수정 시)
+      pollId = existingPoll.id;
+    } else {
+      // 새 poll ID 생성 (날짜 기반 + 랜덤)
+      const today = new Date();
+      const kstOffset = 9 * 60;
+      const kstTime = new Date(today.getTime() + kstOffset * 60 * 1000);
+      const dateStr = kstTime.toISOString().split("T")[0]; // YYYY-MM-DD
+      const randomSuffix = crypto.randomBytes(4).toString("hex");
+      pollId = `poll-${dateStr}-${randomSuffix}`;
+    }
+    
     const payload = {
+      id: pollId,
       question: question.trim(),
       left: { label: left.label.trim(), emoji: left.emoji || "" },
       right: { label: right.label.trim(), emoji: right.emoji || "" },

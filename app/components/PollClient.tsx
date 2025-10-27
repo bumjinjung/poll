@@ -4,10 +4,11 @@ import { useEffect, useMemo, useState, useRef, useCallback } from "react";
 import Link from "next/link";
 import { flushSync } from "react-dom";
 
-const ANIM_MS = 600;
-const REVEAL_DELAY = 90;
+const ANIM_MS = 1000; // 투표 시 애니메이션 시간 (천천히)
+const REVEAL_DELAY = 0; // 즉시 표시
 
 type TwoChoicePollConfig = {
+  id: string;
   question: string;
   left: { label: string; emoji?: string };
   right: { label: string; emoji?: string };
@@ -57,6 +58,7 @@ export default function PollClient({
 
   const [questionKey, setQuestionKey] = useState(0);
   const [voteEffect, setVoteEffect] = useState<"A" | "B" | null>(null);
+  const [isJustVoted, setIsJustVoted] = useState(false); // 지금 막 투표했는지 여부
 
   // Refs
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -64,10 +66,7 @@ export default function PollClient({
   const hasShownResultRef = useRef(false);
   const hasVotedRef = useRef<"A" | "B" | null>(null);
 
-  const storageKey = useMemo(
-    () => `poll-voted-${config?.question || ""}`,
-    [config?.question]
-  );
+  // localStorage 제거 - 서버 응답만 신뢰
 
   // 파생값
   const total = (votes?.A || 0) + (votes?.B || 0);
@@ -161,6 +160,11 @@ export default function PollClient({
       if (data.userVote) {
         hasVotedRef.current = data.userVote;
         setSelected(data.userVote);
+        
+        // 투표 중이 아닐 때만 isJustVoted를 false로 설정
+        if (!isJustVoted) {
+          // 서버에서 불러온 경우 애니메이션 없이 즉시 표시
+        }
 
         if (!hasShownResultRef.current) {
           setShowResult(true);
@@ -171,28 +175,21 @@ export default function PollClient({
           setShowResult(true);
           setNumbersVisible(true);
         }
-
-        try {
-          const currentStorageKey = `poll-voted-${config?.question || ""}`;
-          localStorage.setItem(currentStorageKey, JSON.stringify({ selected: data.userVote }));
-      } catch {}
-    } else {
+      } else {
         hasVotedRef.current = null;
         hasShownResultRef.current = false;
-      setSelected(null);
-      setShowResult(false);
+        setSelected(null);
+        setShowResult(false);
         setSynced(false);
         setNumbersVisible(false);
-
-        try {
-          const currentStorageKey = `poll-voted-${config?.question || ""}`;
-          localStorage.removeItem(currentStorageKey);
-        } catch {}
+        if (!isJustVoted) {
+          // 투표 중이 아닐 때만 초기화
+        }
       }
     } finally {
       setTimeout(() => setIsUpdating(false), 180);
     }
-  }, [config?.question, votes.A, votes.B, animatedTotal]);
+  }, [config?.question, votes.A, votes.B, animatedTotal, isJustVoted]);
 
   // ===== 5초 간격 폴링 (투표 결과만) =====
   useEffect(() => {
@@ -244,10 +241,6 @@ export default function PollClient({
     if (!config) return;
     const prevQ = prevQuestionRef.current;
     if (prevQ && prevQ !== config.question) {
-      try {
-        localStorage.removeItem(`poll-voted-${prevQ}`);
-      } catch {}
-      
       prevQuestionRef.current = config.question;
       setQuestionKey((k) => k + 1);
 
@@ -264,11 +257,12 @@ export default function PollClient({
       setPendingChoice(null);
       setSynced(false);
 
-          setShowResult(false);
+      setShowResult(false);
       hasShownResultRef.current = false;
       hasVotedRef.current = null;
       setNumbersVisible(false);
       hasInitializedRef.current = false;
+      setIsJustVoted(false);
 
       fetchVotesAndConfig();
     } else if (!prevQuestionRef.current) {
@@ -277,28 +271,11 @@ export default function PollClient({
     }
   }, [config?.question, fetchVotesAndConfig]);
 
-  // 로컬 저장된 내 투표 빠른 반영(최초 진입만)
+  // 서버에서만 투표 상태 확인 (최초 진입만)
   const hasInitializedRef = useRef(false);
   useEffect(() => {
     if (!config?.question || hasInitializedRef.current) return;
     hasInitializedRef.current = true;
-    
-    try {
-      const raw = localStorage.getItem(`poll-voted-${config.question}`);
-      if (raw) {
-        const parsed = JSON.parse(raw) as { selected?: "A" | "B" };
-        if (parsed?.selected) {
-          hasVotedRef.current = parsed.selected;
-          setSelected(parsed.selected);
-          setShowResult(true);
-          hasShownResultRef.current = true;
-          setNumbersVisible(false);
-          setTimeout(() => setNumbersVisible(true), REVEAL_DELAY);
-          fetchVotesAndConfig();
-          return;
-        }
-      }
-    } catch {}
     fetchVotesAndConfig();
   }, [config?.question, fetchVotesAndConfig]);
 
@@ -311,10 +288,12 @@ export default function PollClient({
     // 투표 중 표시
     setSelected(choice);
     setShowResult(true);
+    setIsJustVoted(true); // 지금 막 투표했음을 표시
+    setNumbersVisible(false); // 숫자는 일단 숨김
     
     // 투표 효과
     setVoteEffect(choice);
-    setTimeout(() => setVoteEffect(null), 600);
+    setTimeout(() => setVoteEffect(null), ANIM_MS);
 
     try {
       const res = await fetch("/api/vote", {
@@ -331,26 +310,36 @@ export default function PollClient({
         hasVotedRef.current = choice;
         hasShownResultRef.current = true;
         
-        // 애니메이션 값 업데이트
+        // 새로운 값 계산
         const tot = data.votes.A + data.votes.B;
         const pA = tot ? Math.round((data.votes.A / tot) * 100) : 0;
         const pB = tot ? 100 - pA : 0;
         
-        setAnimatedVotesA(data.votes.A);
-        setAnimatedVotesB(data.votes.B);
-        setAnimatedTotal(tot);
-        setAnimatedPercentA(pA);
-        setAnimatedPercentB(pB);
-        setPreviousVotesA(data.votes.A);
-        setPreviousVotesB(data.votes.B);
-        setPreviousTotal(tot);
-        setPreviousPercentA(pA);
-        setPreviousPercentB(pB);
-        setNumbersVisible(true);
+        // 애니메이션 시작 - 이전 값에서 새 값으로
+        setTimeout(() => {
+          animateDigitChange(animatedVotesA, data.votes.A, setAnimatedVotesA);
+          animateDigitChange(animatedVotesB, data.votes.B, setAnimatedVotesB);
+          animateDigitChange(animatedTotal, tot, setAnimatedTotal);
+          animateDigitChange(animatedPercentA, pA, setAnimatedPercentA);
+          animateDigitChange(animatedPercentB, pB, setAnimatedPercentB);
+          
+          // 애니메이션 후 이전 값 업데이트
+          setTimeout(() => {
+            setPreviousVotesA(data.votes.A);
+            setPreviousVotesB(data.votes.B);
+            setPreviousTotal(tot);
+            setPreviousPercentA(pA);
+            setPreviousPercentB(pB);
+          }, ANIM_MS);
+        }, 100);
         
-        try {
-          localStorage.setItem(storageKey, JSON.stringify({ selected: choice }));
-        } catch {}
+        // 숫자 표시 (색 채우기 애니메이션 완료 후)
+        setTimeout(() => setNumbersVisible(true), ANIM_MS - 200);
+        
+        // 애니메이션 완료 후 isJustVoted 해제
+        setTimeout(() => {
+          setIsJustVoted(false);
+        }, ANIM_MS + 100);
         
         try {
           if (!bcRef.current) bcRef.current = new BroadcastChannel("poll_channel");
@@ -368,6 +357,7 @@ export default function PollClient({
       setNumbersVisible(false);
       hasVotedRef.current = null;
       hasShownResultRef.current = false;
+      setIsJustVoted(false);
       
       // 서버 상태 확인
       fetchVotesAndConfig();
@@ -453,28 +443,38 @@ export default function PollClient({
             `}
             aria-pressed={isAActive}
           >
-            {isAActive && <div className="absolute inset-0 bg-black/5 md:backdrop-blur-[1px] pointer-events-none" />}
+            {isAActive && <div className="absolute inset-0 z-[3] bg-black/5 md:backdrop-blur-[1px] pointer-events-none" />}
             {isAActive && (
               <div
-                className="absolute inset-0 pointer-events-none"
+                className="absolute inset-0 z-[3] pointer-events-none"
                 style={{ background: "conic-gradient(from 0deg, transparent, rgba(37,99,235,.3), transparent)", borderRadius: "inherit" }}
               >
                 <div className="animate-ringSweep w-full h-full" />
               </div>
             )}
+            {/* 배경 - 항상 표시 */}
+            <div className="absolute inset-0 z-0 bg-neutral-50" />
+            
+            {/* hover 효과 */}
             {!showResult && (
               <div
-                className="absolute inset-0 pointer-events-none overflow-hidden bg-gradient-to-br from-blue-400/40 to-blue-500/30 opacity-0 group-hover:opacity-100 transition-all"
-                style={{ transform: "scaleY(0)", transformOrigin: "bottom", transition: `opacity 300ms ease, transform ${ANIM_MS}ms ease-out` }}
+                className="absolute inset-0 z-[1] pointer-events-none overflow-hidden bg-gradient-to-br from-blue-400/40 to-blue-500/30 opacity-0 group-hover:opacity-100 transition-opacity duration-200"
               />
             )}
+            
+            {/* 선택된 색상 오버레이 */}
+            {isAActive && (
               <div
-                className={`absolute inset-0 z-0 transition-transform origin-bottom ${
-                  isAActive ? "bg-gradient-to-br from-blue-500 to-blue-600 scale-y-100" : "bg-neutral-50 scale-y-0"
-                }`}
-                style={{ transitionDuration: `${ANIM_MS}ms`, transformOrigin: "bottom center" }}
+                className="absolute inset-0 z-[2] bg-gradient-to-br from-blue-500 to-blue-600"
+                style={isJustVoted ? { 
+                  animation: `fillUp ${ANIM_MS}ms cubic-bezier(0.4, 0, 0.2, 1) forwards`,
+                  transformOrigin: 'bottom'
+                } : { 
+                  opacity: 1
+                }}
               />
-            <div className={`relative z-10 h-full flex flex-col items-center p-3 sm:p-4 gap-1 sm:gap-2 ${
+            )}
+            <div className={`relative z-[10] h-full flex flex-col items-center p-3 sm:p-4 gap-1 sm:gap-2 ${
               showNumbers ? "justify-center" : "justify-center"
             }`}>
               <div className={`text-3xl sm:text-4xl md:text-5xl transition-transform duration-300 ${isAActive ? "scale-110 animate-emojiBounce" : ""}`}>
@@ -490,11 +490,11 @@ export default function PollClient({
                 </div>
               )}
             </div>
-            {isAActive && <div className="absolute inset-0 ring-4 ring-blue-400 ring-offset-4 ring-offset-transparent rounded-[1.5rem] sm:rounded-[2rem]" />}
+            {isAActive && <div className="absolute inset-0 z-[4] ring-4 ring-blue-400 ring-offset-4 ring-offset-transparent rounded-[1.5rem] sm:rounded-[2rem] pointer-events-none" />}
             {voteEffect === "A" && (
               <div
-                className="absolute inset-0 rounded-[1.5rem] sm:rounded-[2rem] pointer-events-none"
-                style={{ background: "radial-gradient(circle, rgba(59,130,246,.3) 0%, transparent 70%)", animation: "votePopEffect 0.6s ease-out forwards" }}
+                className="absolute inset-0 z-[5] rounded-[1.5rem] sm:rounded-[2rem] pointer-events-none"
+                style={{ background: "radial-gradient(circle, rgba(59,130,246,.3) 0%, transparent 70%)", animation: `votePopEffect ${ANIM_MS}ms ease-out forwards` }}
               />
             )}
           </button>
@@ -511,28 +511,38 @@ export default function PollClient({
             `}
             aria-pressed={isBActive}
           >
-            {isBActive && <div className="absolute inset-0 bg-black/5 md:backdrop-blur-[1px] pointer-events-none" />}
+            {isBActive && <div className="absolute inset-0 z-[3] bg-black/5 md:backdrop-blur-[1px] pointer-events-none" />}
             {isBActive && (
               <div
-                className="absolute inset-0 pointer-events-none"
+                className="absolute inset-0 z-[3] pointer-events-none"
                 style={{ background: "conic-gradient(from 0deg, transparent, rgba(147,51,234,.3), transparent)", borderRadius: "inherit" }}
               >
                 <div className="animate-ringSweep w-full h-full" />
               </div>
             )}
+            {/* 배경 - 항상 표시 */}
+            <div className="absolute inset-0 z-0 bg-neutral-50" />
+            
+            {/* hover 효과 */}
             {!showResult && (
               <div
-                className="absolute inset-0 pointer-events-none overflow-hidden bg-gradient-to-br from-purple-400/40 to-purple-500/30 opacity-0 group-hover:opacity-100 transition-all"
-                style={{ transform: "scaleY(0)", transformOrigin: "bottom", transition: `opacity 300ms ease, transform ${ANIM_MS}ms ease-out` }}
+                className="absolute inset-0 z-[1] pointer-events-none overflow-hidden bg-gradient-to-br from-purple-400/40 to-purple-500/30 opacity-0 group-hover:opacity-100 transition-opacity duration-200"
               />
             )}
+            
+            {/* 선택된 색상 오버레이 */}
+            {isBActive && (
               <div
-                className={`absolute inset-0 z-0 transition-transform origin-bottom ${
-                  isBActive ? "bg-gradient-to-br from-purple-500 to-purple-600 scale-y-100" : "bg-neutral-50 scale-y-0"
-                }`}
-                style={{ transitionDuration: `${ANIM_MS}ms`, transformOrigin: "bottom center" }}
+                className="absolute inset-0 z-[2] bg-gradient-to-br from-purple-500 to-purple-600"
+                style={isJustVoted ? { 
+                  animation: `fillUp ${ANIM_MS}ms cubic-bezier(0.4, 0, 0.2, 1) forwards`,
+                  transformOrigin: 'bottom'
+                } : { 
+                  opacity: 1
+                }}
               />
-            <div className={`relative z-10 h-full flex flex-col items-center p-3 sm:p-4 gap-1 sm:gap-2 ${
+            )}
+            <div className={`relative z-[10] h-full flex flex-col items-center p-3 sm:p-4 gap-1 sm:gap-2 ${
               showNumbers ? "justify-center" : "justify-center"
             }`}>
               <div className={`text-3xl sm:text-4xl md:text-5xl transition-transform duration-300 ${isBActive ? "scale-110 animate-emojiBounce" : ""}`}>
@@ -548,11 +558,11 @@ export default function PollClient({
                 </div>
               )}
             </div>
-            {isBActive && <div className="absolute inset-0 ring-4 ring-purple-400 ring-offset-4 ring-offset-transparent rounded-[1.5rem] sm:rounded-[2rem]" />}
+            {isBActive && <div className="absolute inset-0 z-[4] ring-4 ring-purple-400 ring-offset-4 ring-offset-transparent rounded-[1.5rem] sm:rounded-[2rem] pointer-events-none" />}
             {voteEffect === "B" && (
               <div
-                className="absolute inset-0 rounded-[1.5rem] sm:rounded-[2rem] pointer-events-none"
-                style={{ background: "radial-gradient(circle, rgba(147,51,234,.3) 0%, transparent 70%)", animation: "votePopEffect 0.6s ease-out forwards" }}
+                className="absolute inset-0 z-[5] rounded-[1.5rem] sm:rounded-[2rem] pointer-events-none"
+                style={{ background: "radial-gradient(circle, rgba(147,51,234,.3) 0%, transparent 70%)", animation: `votePopEffect ${ANIM_MS}ms ease-out forwards` }}
               />
             )}
           </button>

@@ -47,6 +47,7 @@ if (isDev) {
 }
 
 export interface PollData {
+  id: string; // 설문 고유 ID
   question: string;
   left: { label: string; emoji: string };
   right: { label: string; emoji: string };
@@ -64,7 +65,7 @@ export interface PollHistoryItem {
 }
 
 export interface UserVoteRecord {
-  question: string;
+  pollId: string;
   choice: "A" | "B";
   timestamp: number;
 }
@@ -324,45 +325,26 @@ export async function checkAndPromoteTomorrowPoll(): Promise<boolean> {
   return false;
 }
 
-// ========== 사용자 중복 투표 방지 ==========
+// ========== 사용자 중복 투표 방지 (UUID + Poll ID 기반) ==========
 
-// 사용자가 현재 질문에 이미 투표했는지 확인하고 투표 정보 반환
-export async function checkUserVoted(userHash: string, currentQuestion: string): Promise<UserVoteRecord | null> {
-  const key = `vote:user:${userHash}`;
+// 사용자가 특정 poll에 이미 투표했는지 확인
+export async function checkUserVoted(userId: string, pollId: string): Promise<UserVoteRecord | null> {
+  const key = `vote:user:${userId}:poll:${pollId}`;
   
   if (isDev) {
     const record = devStore.get(key) as UserVoteRecord | undefined;
-    if (record) {
-      // 질문이 변경되었으면 question 필드만 현재 질문으로 업데이트
-      if (record.question !== currentQuestion) {
-        const updatedRecord = { ...record, question: currentQuestion };
-        devStore.set(key, updatedRecord);
-        saveDevData();
-        return updatedRecord;
-      }
-      return record;
-    }
-    return null;
+    return record || null;
   }
   
   const record = await kv.get<UserVoteRecord>(key);
-  if (record) {
-    // 질문이 변경되었으면 question 필드만 현재 질문으로 업데이트
-    if (record.question !== currentQuestion) {
-      const updatedRecord = { ...record, question: currentQuestion };
-      await kv.set(key, updatedRecord);
-      return updatedRecord;
-    }
-    return record;
-  }
-  return null;
+  return record || null;
 }
 
-// 사용자 투표 기록 저장
-export async function recordUserVote(userHash: string, question: string, choice: "A" | "B"): Promise<void> {
-  const key = `vote:user:${userHash}`;
+// 사용자 투표 기록 저장 (poll 단위)
+export async function recordUserVote(userId: string, pollId: string, choice: "A" | "B"): Promise<void> {
+  const key = `vote:user:${userId}:poll:${pollId}`;
   const record: UserVoteRecord = {
-    question,
+    pollId,
     choice,
     timestamp: Date.now(),
   };
@@ -373,7 +355,7 @@ export async function recordUserVote(userHash: string, question: string, choice:
     return;
   }
   
-  // KV에 저장 (질문이 바뀌면 자동으로 덮어씌워짐)
+  // KV에 저장
   await kv.set(key, record);
 }
 

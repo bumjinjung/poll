@@ -1,15 +1,29 @@
 import { NextResponse } from "next/server";
 import { addVote, getVoteData, getPollData, checkUserVoted, recordUserVote } from "@/lib/kv";
-import { headers } from "next/headers";
+import { cookies } from "next/headers";
 import crypto from "crypto";
 
 // 캐시 완전 비활성화
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-// IP + UA로 고유 해시 생성
-function getUserHash(ip: string, ua: string): string {
-  return crypto.createHash("sha256").update(`${ip}:${ua}`).digest("hex");
+const USER_ID_COOKIE = "poll_user_id";
+
+// UUID v4 생성
+function generateUUID(): string {
+  return crypto.randomUUID();
+}
+
+// 쿠키에서 사용자 ID 가져오거나 생성
+async function getUserId(): Promise<string> {
+  const cookieStore = await cookies();
+  let userId = cookieStore.get(USER_ID_COOKIE)?.value;
+  
+  if (!userId) {
+    userId = generateUUID();
+  }
+  
+  return userId;
 }
 
 // 투표하기
@@ -24,15 +38,10 @@ export async function POST(req: Request) {
       );
     }
 
-    // IP와 User-Agent 가져오기
-    const headersList = await headers();
-    const ip = headersList.get("x-forwarded-for")?.split(",")[0] || 
-               headersList.get("x-real-ip") || 
-               "unknown";
-    const ua = headersList.get("user-agent") || "unknown";
-    const userHash = getUserHash(ip, ua);
+    // 사용자 ID 가져오기
+    const userId = await getUserId();
 
-    // 현재 질문 가져오기
+    // 현재 설문 가져오기
     const currentPoll = await getPollData();
     if (!currentPoll) {
       return NextResponse.json(
@@ -40,10 +49,9 @@ export async function POST(req: Request) {
         { status: 404 }
       );
     }
-    const currentQuestion = currentPoll.question;
 
-    // 이미 투표했는지 확인
-    const userVote = await checkUserVoted(userHash, currentQuestion);
+    // 이미 투표했는지 확인 (poll ID 기반)
+    const userVote = await checkUserVoted(userId, currentPoll.id);
     if (userVote) {
       return NextResponse.json(
         { success: false, message: "이미 투표하셨습니다" },
@@ -54,10 +62,19 @@ export async function POST(req: Request) {
     // 투표 처리
     const votes = await addVote(choice);
 
-    // 사용자 투표 기록
-    await recordUserVote(userHash, currentQuestion, choice);
+    // 사용자 투표 기록 (poll ID 기반)
+    await recordUserVote(userId, currentPoll.id, choice);
 
     const response = NextResponse.json({ success: true, votes });
+    
+    // 쿠키 설정 (1년 유지)
+    const cookieStore = await cookies();
+    cookieStore.set(USER_ID_COOKIE, userId, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge: 60 * 60 * 24 * 365, // 1년
+    });
     
     // 캐시 방지 헤더 설정
     response.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
@@ -79,7 +96,7 @@ export async function GET() {
   try {
     const votes = await getVoteData();
     
-    // 현재 질문 가져오기
+    // 현재 설문 가져오기
     const currentPoll = await getPollData();
     if (!currentPoll) {
       const response = NextResponse.json({ success: true, votes, userVote: null });
@@ -89,22 +106,28 @@ export async function GET() {
       return response;
     }
     
-    // IP와 User-Agent 가져오기
-    const headersList = await headers();
-    const ip = headersList.get("x-forwarded-for")?.split(",")[0] || 
-               headersList.get("x-real-ip") || 
-               "unknown";
-    const ua = headersList.get("user-agent") || "unknown";
-    const userHash = getUserHash(ip, ua);
+    // 사용자 ID 가져오기
+    const userId = await getUserId();
     
-    // 사용자가 이미 투표했는지 확인하고 투표 정보 반환
-    const userVote = await checkUserVoted(userHash, currentPoll.question);
+    // 사용자가 이미 투표했는지 확인 (poll ID 기반)
+    const userVote = await checkUserVoted(userId, currentPoll.id);
     
     const response = NextResponse.json({ 
       success: true, 
       votes, 
       userVote: userVote ? userVote.choice : null 
     });
+    
+    // 쿠키 설정 (조회 시에도 쿠키가 없으면 생성)
+    const cookieStore = await cookies();
+    if (!cookieStore.get(USER_ID_COOKIE)) {
+      cookieStore.set(USER_ID_COOKIE, userId, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+        maxAge: 60 * 60 * 24 * 365, // 1년
+      });
+    }
     
     // 캐시 방지 헤더 설정
     response.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
