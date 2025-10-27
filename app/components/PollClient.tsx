@@ -292,6 +292,7 @@ export default function PollClient({
       if (data.success && data.votes) {
         // 서버 응답으로 상태 업데이트
         setVotes(data.votes);
+        latestVotesRef.current = data.votes; // 즉시 ref 업데이트하여 다음 fetch에서 변경 감지 안 되게
         setSelected(choice);
         hasVotedRef.current = choice;
         hasShownResultRef.current = true;
