@@ -6,15 +6,6 @@ import Link from "next/link";
 const ANIM_MS = 1000; // 투표 시 애니메이션 시간 (천천히)
 const REVEAL_DELAY = 0; // 즉시 표시
 
-// 쿠키에서 특정 값 읽기
-function getCookie(name: string): string | null {
-  if (typeof document === 'undefined') return null;
-  const value = `; ${document.cookie}`;
-  const parts = value.split(`; ${name}=`);
-  if (parts.length === 2) return parts.pop()?.split(';').shift() || null;
-  return null;
-}
-
 type TwoChoicePollConfig = {
   id: string;
   question: string;
@@ -31,14 +22,11 @@ export default function PollClient({
   initialConfig: TwoChoicePollConfig | null;
   initialVotes: VoteData;
 }) {
-  // 쿠키 확인 - 투표한 사용자면 optimistic하게 결과 표시
-  const hasUserCookie = getCookie('poll_user_id') !== null;
-  
   // ===== 기본 상태 =====
   const [config, setConfig] = useState<TwoChoicePollConfig | null>(initialConfig);
   const [votes, setVotes] = useState<VoteData>(initialVotes);
   const [selected, setSelected] = useState<"A" | "B" | null>(null);
-  const [showResult, setShowResult] = useState(hasUserCookie);
+  const [showResult, setShowResult] = useState(false);
   const [synced, setSynced] = useState(false);
   const [isVisible, setIsVisible] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
@@ -46,7 +34,7 @@ export default function PollClient({
   // ===== 애니메이션 제어 =====
   const [animationKey, setAnimationKey] = useState(0);
   const [isAnimating, setIsAnimating] = useState(false);
-  const [numbersOpacity, setNumbersOpacity] = useState(hasUserCookie ? 1 : 0);
+  const [numbersOpacity, setNumbersOpacity] = useState(0);
 
   // 애니메이션용 숫자
   const [animatedPercentA, setAnimatedPercentA] = useState(() => {
@@ -67,14 +55,15 @@ export default function PollClient({
   // Refs
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const bcRef = useRef<BroadcastChannel | null>(null);
-  const hasShownResultRef = useRef(hasUserCookie);
+  const hasShownResultRef = useRef(false);
   const hasVotedRef = useRef<"A" | "B" | null>(null);
   const isVotingInProgressRef = useRef(false);
+  const isFetchingRef = useRef(false);
   const hasInitializedRef = useRef(false);
   const prevQuestionRef = useRef<string | null>(null);
   const senderIdRef = useRef<string>(crypto.randomUUID()); // 자신의 메시지 구분용
   const latestVotesRef = useRef(votes); // 최신 votes 값 저장
-  const animationFrameIds = useRef<number[]>([]); // 진행 중인 애니메이션 프레임 ID들
+  const animTokenRef = useRef(0); // 애니메이션 취소용 토큰
 
   // 최신 votes 값 동기화
   useEffect(() => { 
@@ -94,26 +83,22 @@ export default function PollClient({
 
   // ===== 모든 진행 중인 숫자 애니메이션 취소 =====
   const cancelAllAnimations = () => {
-    animationFrameIds.current.forEach(id => cancelAnimationFrame(id));
-    animationFrameIds.current = [];
+    animTokenRef.current++;
   };
 
   // ===== 숫자 애니메이션 유틸 =====
   const animateDigitChange = (from: number, to: number, setter: (n: number) => void) => {
     if (from === to) return;
+    const token = animTokenRef.current;
     const start = performance.now();
-    let frameId: number;
     const step = (t: number) => {
+      if (animTokenRef.current !== token) return; // 이전 애니메이션 즉시 중단
       const p = Math.min((t - start) / ANIM_MS, 1);
       const eased = 1 - Math.pow(1 - p, 3);
       setter(Math.round(from + (to - from) * eased));
-      if (p < 1) {
-        frameId = requestAnimationFrame(step);
-        animationFrameIds.current.push(frameId);
-      }
+      if (p < 1) requestAnimationFrame(step);
     };
-    frameId = requestAnimationFrame(step);
-    animationFrameIds.current.push(frameId);
+    requestAnimationFrame(step);
   };
 
   // ===== 애니메이션 완료 핸들러 (개선됨) =====
@@ -131,7 +116,8 @@ export default function PollClient({
 
   // ===== 서버 통신 (deps 안정화) =====
   const fetchVotesAndConfig = useCallback(async () => {
-    if (isVotingInProgressRef.current) return;
+    if (isVotingInProgressRef.current || isFetchingRef.current) return;
+    isFetchingRef.current = true;
     
     try {
       setIsUpdating(true);
@@ -190,6 +176,7 @@ export default function PollClient({
         setNumbersOpacity(0);
       }
     } finally {
+      isFetchingRef.current = false;
       setTimeout(() => setIsUpdating(false), 180);
     }
   }, []); // deps 비움 - latestVotesRef로 최신 값 참조
@@ -265,6 +252,18 @@ export default function PollClient({
       prevQuestionRef.current = config.question;
     }
   }, [config?.question, fetchVotesAndConfig]);
+
+  // mount 또는 config.id 바뀔 때 localStorage에서 투표 여부 확인
+  useEffect(() => {
+    if (!config?.id) return;
+    let voted = false;
+    try {
+      voted = localStorage.getItem(`poll:voted:${config.id}`) === '1';
+    } catch {}
+    setShowResult(voted);
+    setNumbersOpacity(voted ? 1 : 0);
+    hasShownResultRef.current = voted;
+  }, [config?.id]);
 
   // 서버에서만 투표 상태 확인 (최초 진입만)
   useEffect(() => {
@@ -347,6 +346,13 @@ export default function PollClient({
         // 숫자 즉시 표시
         setNumbersOpacity(1);
         
+        // localStorage에 투표 여부 저장
+        try {
+          if (config?.id) {
+            localStorage.setItem(`poll:voted:${config.id}`, '1');
+          }
+        } catch {}
+        
         try {
           if (!bcRef.current) bcRef.current = new BroadcastChannel("poll_channel");
           bcRef.current.postMessage({ type: "vote_update_hint", sender: senderIdRef.current });
@@ -369,6 +375,13 @@ export default function PollClient({
       // optimistic update 롤백
       setVotes(previousVotes);
       latestVotesRef.current = previousVotes;
+      
+      // localStorage에서도 제거
+      try {
+        if (config?.id) {
+          localStorage.removeItem(`poll:voted:${config.id}`);
+        }
+      } catch {}
       
       // 서버 상태 확인
       fetchVotesAndConfig();
