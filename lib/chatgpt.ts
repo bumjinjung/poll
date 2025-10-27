@@ -8,7 +8,7 @@ export interface PollTemplate {
 	right: { label: string; emoji: string };
 }
 
-/** SNS 트렌드형, 유행/자극형 밸런스게임 1개 생성 */
+/** SNS 트렌드형, 유행/자극형 밸런스게임 1개 생성 (클리셰 허용: 이성친구, 아아/뜨아 등) */
 export async function generatePollWithChatGPT(
 	recentQuestions: string[] = []
 ): Promise<{ success: boolean; poll?: PollTemplate; error?: string }> {
@@ -17,33 +17,37 @@ export async function generatePollWithChatGPT(
 			return { success: false, error: "OpenAI API 키가 설정되지 않았습니다." };
 		}
 
-		// 반복 방지용 기본 금지 세트
-		const globalBanlist = [
-			"치킨 vs 피자","민초 vs 반민초","부먹 vs 찍먹","아침형 vs 밤형","운동 vs 휴식",
-			"집에서 vs 밖에서","콜라 vs 사이다","강아지 vs 고양이","여름 vs 겨울",
-			"게임 vs 영화","커피 vs 차","바다 vs 산","아이폰 vs 갤럭시","축구 vs 야구"
-		];
+		// 전역 금지 세트 제거 — 밈/클리셰 허용(아아 vs 뜨아 등)
+		// 단, 직전·최근 질문(recentQuestions)만 회피하여 과도한 중복 방지
+		const globalBanlist: string[] = [];
 
 		const systemPrompt = `
-당신은 한국 SNS 밸런스게임 제작 도우미입니다.
-밈스럽고 자극적이며 유행어가 섞인 짧고 강한 질문을 만들어야 합니다.
-'당신의 선택은?', '무엇을 고를래요?' 같은 꼬리 문장은 절대 사용하지 마세요.
-단, 선정적·혐오·폭력적인 내용은 금지입니다.
-
+너는 한국 SNS 밈 기반 밸런스게임 작가다.
+문항은 도덕/교과서적일 필요 전혀 없음. 현실·감정·밈·유행·자극을 최우선.
+질문은 짧고 강렬하게. "당신의 선택은?" 같은 꼬리 문장 금지.
+"00 vs 00" 형식이 아니어도 되며, 한 문장만으로 의미가 통하면 충분.
+주제 예: 이성친구 가능/불가능, 아아 vs 뜨아, 읽씹/既読, 퇴사, 야근, 헬스장, 소개팅, DM, 돈, 체면, 민망함, 질투, 자존심 등.
+금지: 노골적 성적 표현, 혐오/차별, 직접적 폭력 조장.
 규칙:
-- question은 5~20자, 간결하고 즉흥적 표현 가능.
-- left/right는 1~15자, 의미 겹치지 않게.
-- 각 label에 맞는 이모지 1개 포함.
-- 반복, 동의어, 클리셰 피함.
+- question: 3~30자, 밈 감성/현실 대화체 가능.
+- left/right: 1~15자, 의미 중복 금지, 각 1개 이모지 포함(자연스러운 이모지).
 - 오직 JSON만 출력.
 `.trim();
 
 		const userPrompt = `
-금지/회피 목록:
+최근/회피 목록:
 ${[...globalBanlist, ...recentQuestions].join("\n") || "- (없음)"}
 
-출력 예시(JSON only):
-{"question":"전남친 결혼식 초대장","left":{"label":"간다","emoji":"😈"},"right":{"label":"안 간다","emoji":"🙄"}}
+예시(JSON only):
+{"question":"이성친구, 가능?","left":{"label":"가능","emoji":"🫱"},"right":{"label":"불가능","emoji":"⛔"}}
+{"question":"아아 vs 뜨아","left":{"label":"아아","emoji":"🧊"},"right":{"label":"뜨아","emoji":"🔥"}}
+{"question":"단톡방 읽씹 사태","left":{"label":"이모지로 마무리","emoji":"😅"},"right":{"label":"끝까지 잠수","emoji":"🌊"}}
+{"question":"퇴사 메일 임시보관함 7일째","left":{"label":"보낸다","emoji":"📨"},"right":{"label":"버틴다","emoji":"🗓️"}}
+{"question":"새벽 감성 DM","left":{"label":"보낸다","emoji":"🫣"},"right":{"label":"참는다","emoji":"⏰"}}
+
+위 톤으로 새로운 밸런스게임 질문 1개 생성:
+형식(JSON only):
+{"question":"문장","left":{"label":"선택1","emoji":"🙂"},"right":{"label":"선택2","emoji":"😎"}}
 `.trim();
 
 		const completion = await openai.chat.completions.create({
@@ -53,10 +57,10 @@ ${[...globalBanlist, ...recentQuestions].join("\n") || "- (없음)"}
 				{ role: "system", content: systemPrompt },
 				{ role: "user", content: userPrompt },
 			],
-			temperature: 0.95,
-			presence_penalty: 0.9,
-			frequency_penalty: 0.8,
-			max_tokens: 180,
+			temperature: 1.1,          // 자극/밈 다양성 ↑
+			presence_penalty: 0.9,     // 새로운 주제 유도
+			frequency_penalty: 0.6,    // 반복 억제
+			max_tokens: 200,
 			n: 3,
 		});
 
@@ -67,7 +71,14 @@ ${[...globalBanlist, ...recentQuestions].join("\n") || "- (없음)"}
 		const pick = pickValid(candidates, [...globalBanlist, ...recentQuestions]);
 		if (!pick) return { success: false, error: "유효한 밸런스게임을 만들지 못했습니다." };
 
-		return { success: true, poll: pick };
+		// 마무리 정리(트림/일관화)
+		const fixed: PollTemplate = {
+			question: pick.question.trim(),
+			left: { label: pick.left.label.trim(), emoji: pick.left.emoji.trim() },
+			right: { label: pick.right.label.trim(), emoji: pick.right.emoji.trim() }
+		};
+
+		return { success: true, poll: fixed };
 	} catch (error: any) {
 		console.error("ChatGPT API 오류:", error);
 		return { success: false, error: error.message || "알 수 없는 오류" };
@@ -97,14 +108,32 @@ function jaccard(a: string, b: string) {
 	return inter / (A.size + B.size - inter);
 }
 
+function isEmojiish(s: string) {
+	if (typeof s !== "string") return false;
+	const t = s.trim();
+	return t.length > 0 && [...t].length <= 4; // 조합 이모지 대충 허용
+}
+
 function pickValid(cands: PollTemplate[], avoid: string[]) {
+	// 1) 기본 구조/길이/이모지
 	const valid = cands.filter(c =>
-		c?.question && c.left?.label && c.right?.label &&
-		jaccard(c.left.label, c.right.label) < 0.6 &&
-		jaccard(c.question, c.left.label) < 0.7 &&
-		jaccard(c.question, c.right.label) < 0.7
+		typeof c?.question === "string" &&
+		typeof c?.left?.label === "string" &&
+		typeof c?.right?.label === "string" &&
+		c.question.trim().length >= 3 && c.question.trim().length <= 30 &&
+		c.left.label.trim().length >= 1 && c.left.label.trim().length <= 15 &&
+		c.right.label.trim().length >= 1 && c.right.label.trim().length <= 15 &&
+		isEmojiish(c.left.emoji) && isEmojiish(c.right.emoji) &&
+		// 라벨끼리 너무 동일한 경우만 금지(질문과의 유사성은 허용: "아아 vs 뜨아" 케이스 보호)
+		jaccard(c.left.label, c.right.label) < 0.65
 	);
-	const fresh = valid.filter(c => !avoid.some(q => jaccard(c.question, q) > 0.7));
-	if (fresh.length) return fresh[Math.floor(Math.random() * fresh.length)];
-	return valid[Math.floor(Math.random() * valid.length)] || null;
+
+	if (!valid.length) return null;
+
+	// 2) 최근/회피 목록과 과도한 유사성만 제거 (질문 기준)
+	const fresh = valid.filter(c => !avoid.some(q => jaccard(c.question, q) >= 0.75));
+
+	// 3) 우선 fresh에서 랜덤, 없으면 valid에서 랜덤
+	const pool = fresh.length ? fresh : valid;
+	return pool[Math.floor(Math.random() * pool.length)] || null;
 }
