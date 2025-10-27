@@ -6,13 +6,6 @@ import Link from "next/link";
 const ANIM_MS = 1000; // 투표 시 애니메이션 시간 (천천히)
 const REVEAL_DELAY = 0; // 즉시 표시
 
-// 전역 타입 선언
-declare global {
-  interface Window {
-    __POLL_VOTED__?: boolean;
-  }
-}
-
 type TwoChoicePollConfig = {
   id: string;
   question: string;
@@ -25,21 +18,17 @@ type VoteData = { A: number; B: number };
 export default function PollClient({
   initialConfig,
   initialVotes,
+  initialUserVote,
 }: {
   initialConfig: TwoChoicePollConfig | null;
   initialVotes: VoteData;
+  initialUserVote: "A" | "B" | null;
 }) {
   // ===== 기본 상태 =====
   const [config, setConfig] = useState<TwoChoicePollConfig | null>(initialConfig);
   const [votes, setVotes] = useState<VoteData>(initialVotes);
-  const [selected, setSelected] = useState<"A" | "B" | null>(null);
-  const [showResult, setShowResult] = useState(() => {
-    // beforeInteractive 스크립트에서 설정한 전역 변수 읽기
-    if (typeof window !== 'undefined' && window.__POLL_VOTED__) {
-      return true;
-    }
-    return false;
-  });
+  const [selected, setSelected] = useState<"A" | "B" | null>(initialUserVote);
+  const [showResult, setShowResult] = useState(initialUserVote !== null);
   const [synced, setSynced] = useState(false);
   const [isVisible, setIsVisible] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
@@ -47,13 +36,7 @@ export default function PollClient({
   // ===== 애니메이션 제어 =====
   const [animationKey, setAnimationKey] = useState(0);
   const [isAnimating, setIsAnimating] = useState(false);
-  const [numbersOpacity, setNumbersOpacity] = useState(() => {
-    // 이미 투표한 상태면 숫자도 바로 표시
-    if (typeof window !== 'undefined' && window.__POLL_VOTED__) {
-      return 1;
-    }
-    return 0;
-  });
+  const [numbersOpacity, setNumbersOpacity] = useState(initialUserVote !== null ? 1 : 0);
   const [fillPlayed, setFillPlayed] = useState(false); // 애니메이션이 한 번 실행되었는지 추적
 
   // 애니메이션용 숫자
@@ -76,8 +59,8 @@ export default function PollClient({
   // Refs
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const bcRef = useRef<BroadcastChannel | null>(null);
-  const hasShownResultRef = useRef(false);
-  const hasVotedRef = useRef<"A" | "B" | null>(null);
+  const hasShownResultRef = useRef(initialUserVote !== null);
+  const hasVotedRef = useRef<"A" | "B" | null>(initialUserVote);
   const isVotingInProgressRef = useRef(false);
   const isFetchingRef = useRef(false);
   const hasInitializedRef = useRef(false);
@@ -621,7 +604,7 @@ export default function PollClient({
           </h2>
         </div>
 
-        <div className="poll-choices-initial flex items-center justify-center gap-3 sm:gap-4">
+        <div className="flex items-center justify-center gap-3 sm:gap-4">
           {/* A */}
           <button
             onClick={() => handleVote("A")}
