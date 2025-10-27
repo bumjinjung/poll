@@ -3,6 +3,10 @@ import { addVote, getVoteData, getPollData, checkUserVoted, recordUserVote } fro
 import { headers } from "next/headers";
 import crypto from "crypto";
 
+// 캐시 완전 비활성화
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 // IP + UA로 고유 해시 생성
 function getUserHash(ip: string, ua: string): string {
   return crypto.createHash("sha256").update(`${ip}:${ua}`).digest("hex");
@@ -53,7 +57,14 @@ export async function POST(req: Request) {
     // 사용자 투표 기록
     await recordUserVote(userHash, currentQuestion, choice);
 
-    return NextResponse.json({ success: true, votes });
+    const response = NextResponse.json({ success: true, votes });
+    
+    // 캐시 방지 헤더 설정
+    response.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
+    response.headers.set('Pragma', 'no-cache');
+    response.headers.set('Expires', '0');
+    
+    return response;
   } catch (error) {
     console.error("Vote error:", error);
     return NextResponse.json(
@@ -71,7 +82,11 @@ export async function GET() {
     // 현재 질문 가져오기
     const currentPoll = await getPollData();
     if (!currentPoll) {
-      return NextResponse.json({ success: true, votes, userVote: null });
+      const response = NextResponse.json({ success: true, votes, userVote: null });
+      response.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
+      response.headers.set('Pragma', 'no-cache');
+      response.headers.set('Expires', '0');
+      return response;
     }
     
     // IP와 User-Agent 가져오기
@@ -85,11 +100,18 @@ export async function GET() {
     // 사용자가 이미 투표했는지 확인하고 투표 정보 반환
     const userVote = await checkUserVoted(userHash, currentPoll.question);
     
-    return NextResponse.json({ 
+    const response = NextResponse.json({ 
       success: true, 
       votes, 
       userVote: userVote ? userVote.choice : null 
     });
+    
+    // 캐시 방지 헤더 설정
+    response.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
+    response.headers.set('Pragma', 'no-cache');
+    response.headers.set('Expires', '0');
+    
+    return response;
   } catch (error) {
     console.error("Get votes error:", error);
     return NextResponse.json(
