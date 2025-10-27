@@ -295,6 +295,26 @@ export default function PollClient({
     // 투표 효과
     setVoteEffect(choice);
     setTimeout(() => setVoteEffect(null), ANIM_MS);
+    
+    // ✅ Optimistic update: 예상되는 최종 값을 미리 계산하여 설정
+    // 네트워크 지연 중 폴링이 실행되어도 카운팅 애니메이션이 발생하지 않도록
+    const previousVotes = votes; // 에러 시 롤백용
+    const optimisticVotes = {
+      A: choice === "A" ? votes.A + 1 : votes.A,
+      B: choice === "B" ? votes.B + 1 : votes.B,
+    };
+    const optimisticTotal = optimisticVotes.A + optimisticVotes.B;
+    const optimisticPercentA = optimisticTotal ? Math.round((optimisticVotes.A / optimisticTotal) * 100) : 0;
+    const optimisticPercentB = optimisticTotal ? 100 - optimisticPercentA : 0;
+    
+    // 즉시 ref와 state 업데이트 (폴링이 실행되어도 변경 감지 안 됨)
+    setVotes(optimisticVotes);
+    latestVotesRef.current = optimisticVotes;
+    setAnimatedVotesA(optimisticVotes.A);
+    setAnimatedVotesB(optimisticVotes.B);
+    setAnimatedTotal(optimisticTotal);
+    setAnimatedPercentA(optimisticPercentA);
+    setAnimatedPercentB(optimisticPercentB);
 
     try {
       const res = await fetch("/api/vote", {
@@ -317,19 +337,15 @@ export default function PollClient({
         const pA = tot ? Math.round((data.votes.A / tot) * 100) : 0;
         const pB = tot ? 100 - pA : 0;
         
-        // 투표 시에는 카운팅 애니메이션 없이 즉시 최종 값으로 설정
+        // 서버 응답 값으로 업데이트 (optimistic과 다를 수 있음)
         setAnimatedVotesA(data.votes.A);
         setAnimatedVotesB(data.votes.B);
         setAnimatedTotal(tot);
         setAnimatedPercentA(pA);
         setAnimatedPercentB(pB);
         
-        // 숫자를 먼저 DOM에 반영한 후 다음 프레임에 표시 (애니메이션 방지)
-        requestAnimationFrame(() => {
-          requestAnimationFrame(() => {
-            setNumbersOpacity(1);
-          });
-        });
+        // 숫자 즉시 표시
+        setNumbersOpacity(1);
         
         try {
           if (!bcRef.current) bcRef.current = new BroadcastChannel("poll_channel");
@@ -349,6 +365,10 @@ export default function PollClient({
       hasShownResultRef.current = false;
       setIsAnimating(false);
       isVotingInProgressRef.current = false;
+      
+      // optimistic update 롤백
+      setVotes(previousVotes);
+      latestVotesRef.current = previousVotes;
       
       // 서버 상태 확인
       fetchVotesAndConfig();
