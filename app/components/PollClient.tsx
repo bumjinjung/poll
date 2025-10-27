@@ -1,8 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState, useRef, useCallback } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import Link from "next/link";
-import { flushSync } from "react-dom";
 
 const ANIM_MS = 1000; // 투표 시 애니메이션 시간 (천천히)
 const REVEAL_DELAY = 0; // 즉시 표시
@@ -39,16 +38,17 @@ export default function PollClient({
   const [config, setConfig] = useState<TwoChoicePollConfig | null>(initialConfig);
   const [votes, setVotes] = useState<VoteData>(initialVotes);
   const [selected, setSelected] = useState<"A" | "B" | null>(null);
-  const [pendingChoice, setPendingChoice] = useState<"A" | "B" | null>(null);
-  const [showResult, setShowResult] = useState(hasUserCookie); // 쿠키 있으면 바로 결과 표시
+  const [showResult, setShowResult] = useState(hasUserCookie);
   const [synced, setSynced] = useState(false);
   const [isVisible, setIsVisible] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
 
-  // 숫자/텍스트 표시 타이밍(색 채움과 싱크)
-  const [numbersVisible, setNumbersVisible] = useState(hasUserCookie); // 쿠키 있으면 바로 표시
+  // ===== 애니메이션 제어 =====
+  const [animationKey, setAnimationKey] = useState(0);
+  const [isAnimating, setIsAnimating] = useState(false);
+  const [numbersOpacity, setNumbersOpacity] = useState(hasUserCookie ? 1 : 0);
 
-  // 애니메이션용 숫자 (SSR과 일치)
+  // 애니메이션용 숫자
   const [animatedPercentA, setAnimatedPercentA] = useState(() => {
     const total = initialVotes.A + initialVotes.B;
     return total > 0 ? Math.round((initialVotes.A / total) * 100) : 0;
@@ -61,39 +61,29 @@ export default function PollClient({
   const [animatedVotesB, setAnimatedVotesB] = useState(initialVotes.B);
   const [animatedTotal, setAnimatedTotal] = useState(initialVotes.A + initialVotes.B);
 
-  // 이전 값들
-  const [previousTotal, setPreviousTotal] = useState(0);
-  const [previousPercentA, setPreviousPercentA] = useState(0);
-  const [previousPercentB, setPreviousPercentB] = useState(0);
-  const [previousVotesA, setPreviousVotesA] = useState(0);
-  const [previousVotesB, setPreviousVotesB] = useState(0);
-
   const [questionKey, setQuestionKey] = useState(0);
   const [voteEffect, setVoteEffect] = useState<"A" | "B" | null>(null);
-  const [isJustVoted, setIsJustVoted] = useState(false); // 지금 막 투표했는지 여부
-  const [fillPlayed, setFillPlayed] = useState(false); // 이번 투표의 fill 애니메이션을 이미 실행했는가
 
   // Refs
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const bcRef = useRef<BroadcastChannel | null>(null);
-  const hasShownResultRef = useRef(hasUserCookie); // 쿠키 있으면 이미 결과 본 것으로 처리
+  const hasShownResultRef = useRef(hasUserCookie);
   const hasVotedRef = useRef<"A" | "B" | null>(null);
-  const isVotingInProgressRef = useRef(false); // 애니메이션 진행 중 쿨다운
+  const isVotingInProgressRef = useRef(false);
+  const hasInitializedRef = useRef(false);
+  const prevQuestionRef = useRef<string | null>(null);
+  const senderIdRef = useRef<string>(crypto.randomUUID()); // 자신의 메시지 구분용
+  const latestVotesRef = useRef(votes); // 최신 votes 값 저장
 
-  // localStorage 제거 - 서버 응답만 신뢰
+  // 최신 votes 값 동기화
+  useEffect(() => { 
+    latestVotesRef.current = votes; 
+  }, [votes]);
 
   // 파생값
-  const total = (votes?.A || 0) + (votes?.B || 0);
-  const percentA = total > 0 ? Math.round(((votes?.A || 0) / total) * 100) : 0;
-  const percentB = total > 0 ? Math.round(((votes?.B || 0) / total) * 100) : 0;
-
-  const isAActive = selected === "A" || pendingChoice === "A";
-  const isBActive = selected === "B" || pendingChoice === "B";
-
-  // 결과 블록은 한번 열리면 유지 (조건 단순화)
+  const isAActive = selected === "A";
+  const isBActive = selected === "B";
   const canShowStats = showResult;
-  
-  const showNumbers = showResult && numbersVisible;
 
   // ===== 등장 애니메이션 =====
   useEffect(() => {
@@ -114,51 +104,38 @@ export default function PollClient({
     requestAnimationFrame(step);
   };
 
-  const applyAnimatedSnapshot = useCallback((base: VoteData, extra?: "A" | "B") => {
-    const nextA = base.A + (extra === "A" ? 1 : 0);
-    const nextB = base.B + (extra === "B" ? 1 : 0);
-    const nextTotal = nextA + nextB;
-    const nextPercentA = nextTotal ? Math.round((nextA / nextTotal) * 100) : 0;
-    const nextPercentB = nextTotal ? 100 - nextPercentA : 0;
+  // ===== 애니메이션 완료 핸들러 (개선됨) =====
+  const handleAnimationEnd = useCallback((e?: React.AnimationEvent<HTMLDivElement>) => {
+    // 이 엘리먼트 자신에게서 발생한 이벤트만
+    if (e && e.currentTarget !== e.target) return;
+    // 정확히 fillUp만 처리
+    // (Tailwind 등에서 다른 animation이 섞일 가능성 방지)
+    // @ts-ignore
+    if (e?.animationName && e.animationName !== "fillUp") return;
 
-    setAnimatedVotesA(nextA);
-    setAnimatedVotesB(nextB);
-    setAnimatedTotal(nextTotal);
-    setAnimatedPercentA(nextPercentA);
-    setAnimatedPercentB(nextPercentB);
-
-    setPreviousVotesA(nextA);
-    setPreviousVotesB(nextB);
-    setPreviousTotal(nextTotal);
-    setPreviousPercentA(nextPercentA);
-    setPreviousPercentB(nextPercentB);
+    setIsAnimating(false);
+    isVotingInProgressRef.current = false;
   }, []);
 
-  // 최초 결과 오픈 시(내가 투표 안했을 때)만 0→실값 카운팅 - 비활성화
-  // fetchVotes와 handleVote에서 직접 애니메이션 값을 설정하므로 불필요
-
-  // ===== 서버 통신 =====
+  // ===== 서버 통신 (deps 안정화) =====
   const fetchVotesAndConfig = useCallback(async () => {
-    // 애니메이션 진행 중에는 서버 갱신 무시 (쿨다운)
-    if (isVotingInProgressRef.current) {
-      return;
-    }
+    if (isVotingInProgressRef.current) return;
     
     try {
       setIsUpdating(true);
       
-      // 투표 결과 가져오기
       const res = await fetch("/api/vote", { cache: "no-store" });
       const data = await res.json();
       if (!data?.success) return;
 
       const v = data.votes;
-      const voteChanged = votes.A !== v.A || votes.B !== v.B;
+      const prev = latestVotesRef.current;
+      const voteChanged = prev.A !== v.A || prev.B !== v.B;
       
-      setVotes(v);
+      setVotes(v); // 이후 latestVotesRef가 업데이트됨
       setSynced(true);
 
-      // 애니메이션 값 업데이트 (값이 변경되었거나 첫 로드일 때)
+      // 애니메이션 값 업데이트
       const newTotal = v.A + v.B;
       const newPercentA = newTotal ? Math.round((v.A / newTotal) * 100) : 0;
       const newPercentB = newTotal ? 100 - newPercentA : 0;
@@ -170,15 +147,6 @@ export default function PollClient({
         animateDigitChange(animatedTotal, newTotal, setAnimatedTotal);
         animateDigitChange(animatedPercentA, newPercentA, setAnimatedPercentA);
         animateDigitChange(animatedPercentB, newPercentB, setAnimatedPercentB);
-        
-        // 애니메이션 완료 후 이전 값 업데이트
-        setTimeout(() => {
-          setPreviousVotesA(v.A);
-          setPreviousVotesB(v.B);
-          setPreviousTotal(newTotal);
-          setPreviousPercentA(newPercentA);
-          setPreviousPercentB(newPercentB);
-        }, ANIM_MS);
       } else if (animatedTotal === 0) {
         // 첫 로드는 즉시 값 설정 (애니메이션 없음)
         setAnimatedVotesA(v.A);
@@ -186,30 +154,20 @@ export default function PollClient({
         setAnimatedTotal(newTotal);
         setAnimatedPercentA(newPercentA);
         setAnimatedPercentB(newPercentB);
-        setPreviousVotesA(v.A);
-        setPreviousVotesB(v.B);
-        setPreviousTotal(newTotal);
-        setPreviousPercentA(newPercentA);
-        setPreviousPercentB(newPercentB);
       }
 
       if (data.userVote) {
         hasVotedRef.current = data.userVote;
         setSelected(data.userVote);
-        
-        // 투표 중이 아닐 때만 isJustVoted를 false로 설정
-        if (!isJustVoted) {
-          // 서버에서 불러온 경우 애니메이션 없이 즉시 표시
-        }
 
         if (!hasShownResultRef.current) {
           setShowResult(true);
           hasShownResultRef.current = true;
-          setNumbersVisible(false);
-          setTimeout(() => setNumbersVisible(true), REVEAL_DELAY);
+          setNumbersOpacity(0);
+          setTimeout(() => setNumbersOpacity(1), REVEAL_DELAY);
         } else {
           setShowResult(true);
-          setNumbersVisible(true);
+          setNumbersOpacity(1);
         }
       } else {
         hasVotedRef.current = null;
@@ -217,34 +175,30 @@ export default function PollClient({
         setSelected(null);
         setShowResult(false);
         setSynced(false);
-        setNumbersVisible(false);
-        if (!isJustVoted) {
-          // 투표 중이 아닐 때만 초기화
-        }
+        setNumbersOpacity(0);
       }
     } finally {
       setTimeout(() => setIsUpdating(false), 180);
     }
-  }, [config?.question, votes.A, votes.B, animatedTotal, isJustVoted]);
+  }, []); // deps 비움 - latestVotesRef로 최신 값 참조
 
-  // ===== 5초 간격 폴링 (투표 결과만) =====
+  // ===== 5초 간격 폴링 =====
   useEffect(() => {
-    // 초기 로드
-    fetchVotesAndConfig();
-
-    // 5초마다 폴링
-    pollIntervalRef.current = setInterval(() => {
-      if (!document.hidden) {
-        fetchVotesAndConfig();
-      }
-    }, 5000);
+    const tick = () => {
+      if (document.hidden) return;
+      if (isVotingInProgressRef.current) return;
+      fetchVotesAndConfig();
+    };
+    
+    tick(); // 초기 로드
+    pollIntervalRef.current = setInterval(tick, 5000);
 
     // 이벤트 리스너
-    const onFocus = () => fetchVotesAndConfig();
+    const onFocus = () => tick();
     const onPageShow = (e: PageTransitionEvent) => {
-      if (e.persisted || (document as any).wasDiscarded) fetchVotesAndConfig();
+      if (e.persisted || (document as any).wasDiscarded) tick();
     };
-    const onOnline = () => fetchVotesAndConfig();
+    const onOnline = () => tick();
 
     window.addEventListener("focus", onFocus);
     window.addEventListener("pageshow", onPageShow as any);
@@ -265,14 +219,13 @@ export default function PollClient({
   useEffect(() => {
     if (showResult && !hasShownResultRef.current) {
       hasShownResultRef.current = true;
-      setNumbersVisible(false);
-      const t = setTimeout(() => setNumbersVisible(true), REVEAL_DELAY);
+      setNumbersOpacity(0);
+      const t = setTimeout(() => setNumbersOpacity(1), REVEAL_DELAY);
       return () => clearTimeout(t);
     }
   }, [showResult]);
 
   // 질문 변경 시 초기화
-  const prevQuestionRef = useRef<string | null>(null);
   useEffect(() => {
     if (!config) return;
     const prevQ = prevQuestionRef.current;
@@ -280,36 +233,28 @@ export default function PollClient({
       prevQuestionRef.current = config.question;
       setQuestionKey((k) => k + 1);
 
-      setPreviousPercentA(0);
-      setPreviousPercentB(0);
-      setPreviousVotesA(0);
-      setPreviousVotesB(0);
-      setPreviousTotal(0);
       setAnimatedPercentA(0);
       setAnimatedPercentB(0);
       setAnimatedVotesA(0);
       setAnimatedVotesB(0);
       setAnimatedTotal(0);
-      setPendingChoice(null);
       setSynced(false);
 
       setShowResult(false);
       hasShownResultRef.current = false;
       hasVotedRef.current = null;
-      setNumbersVisible(false);
+      setNumbersOpacity(0);
       hasInitializedRef.current = false;
-      setIsJustVoted(false);
-      setFillPlayed(false);
+      setAnimationKey(0);
+      setIsAnimating(false);
 
       fetchVotesAndConfig();
     } else if (!prevQuestionRef.current) {
-      // 최초 로드
       prevQuestionRef.current = config.question;
     }
   }, [config?.question, fetchVotesAndConfig]);
 
   // 서버에서만 투표 상태 확인 (최초 진입만)
-  const hasInitializedRef = useRef(false);
   useEffect(() => {
     if (!config?.question || hasInitializedRef.current) return;
     hasInitializedRef.current = true;
@@ -322,15 +267,15 @@ export default function PollClient({
     
     navigator.vibrate?.(20);
     
-    // 애니메이션 진행 중 플래그 설정 (쿨다운 시작)
+    // 애니메이션 진행 중 플래그 설정
     isVotingInProgressRef.current = true;
+    setIsAnimating(true);
     
     // 투표 직후 UI 세팅
     setSelected(choice);
     setShowResult(true);
-    setIsJustVoted(true);
-    setNumbersVisible(false);
-    setFillPlayed(false); // 이번 투표에서 아직 한 번도 실행 안 함
+    setAnimationKey(prev => prev + 1);
+    setNumbersOpacity(0);
     
     // 투표 효과
     setVoteEffect(choice);
@@ -362,30 +307,13 @@ export default function PollClient({
         setAnimatedTotal(tot);
         setAnimatedPercentA(pA);
         setAnimatedPercentB(pB);
-        setPreviousVotesA(data.votes.A);
-        setPreviousVotesB(data.votes.B);
-        setPreviousTotal(tot);
-        setPreviousPercentA(pA);
-        setPreviousPercentB(pB);
         
-        // 숫자는 애니메이션과 동시에 즉시 표시
-        setNumbersVisible(true);
-        
-        // 애니가 "한 번"만 실행되도록: 렌더가 붙은 다음에 종료 시점에 플래그 세팅
-        requestAnimationFrame(() => {
-          // 애니가 끝난 뒤에만 fillPlayed=true (이후 re-render에서 애니 재적용 방지)
-          setTimeout(() => setFillPlayed(true), ANIM_MS + 20);
-        });
-        
-        // 애니메이션 완료 후 상태 초기화 및 쿨다운 해제
-        setTimeout(() => {
-          setIsJustVoted(false);
-          isVotingInProgressRef.current = false; // 쿨다운 종료
-        }, ANIM_MS + 100);
+        // 숫자는 애니메이션과 동시에 표시
+        setNumbersOpacity(1);
         
         try {
           if (!bcRef.current) bcRef.current = new BroadcastChannel("poll_channel");
-          bcRef.current.postMessage({ type: "vote_update_hint" });
+          bcRef.current.postMessage({ type: "vote_update_hint", sender: senderIdRef.current });
         } catch {}
       } else {
         throw new Error("Server returned unsuccessful response");
@@ -396,12 +324,11 @@ export default function PollClient({
       // 실패 시 초기화
       setSelected(null);
       setShowResult(false);
-      setNumbersVisible(false);
+      setNumbersOpacity(0);
       hasVotedRef.current = null;
       hasShownResultRef.current = false;
-      setIsJustVoted(false);
-      setFillPlayed(false);
-      isVotingInProgressRef.current = false; // 쿨다운 해제
+      setIsAnimating(false);
+      isVotingInProgressRef.current = false;
       
       // 서버 상태 확인
       fetchVotesAndConfig();
@@ -425,14 +352,11 @@ export default function PollClient({
     bcRef.current = bc;
 
     bc.onmessage = (event) => {
-      if (isVotingInProgressRef.current) return; // 애니 중엔 무시
+      if (isVotingInProgressRef.current) return;
+      if (event?.data?.sender === senderIdRef.current) return; // 자기것 무시
       
-      if (event.data.type === "config_update") {
-        forceRefreshConfig();
-      }
-      if (event.data.type === "vote_update_hint") {
-        fetchVotesAndConfig();
-      }
+      if (event.data.type === "config_update") forceRefreshConfig();
+      if (event.data.type === "vote_update_hint") fetchVotesAndConfig();
     };
 
     const onStorage = (e: StorageEvent) => {
@@ -498,43 +422,47 @@ export default function PollClient({
                 <div className="animate-ringSweep w-full h-full" />
               </div>
             )}
-            {/* 배경 - 항상 표시 */}
+            
+            {/* 배경 */}
             <div className="absolute inset-0 z-0 bg-neutral-50" />
             
             {/* hover 효과 */}
             {!showResult && (
-              <div
-                className="absolute inset-0 z-[1] pointer-events-none overflow-hidden bg-gradient-to-br from-blue-400/40 to-blue-500/30 opacity-0 group-hover:opacity-100 transition-opacity duration-200"
-              />
+              <div className="absolute inset-0 z-[1] pointer-events-none overflow-hidden bg-gradient-to-br from-blue-400/40 to-blue-500/30 opacity-0 group-hover:opacity-100 transition-opacity duration-200" />
             )}
             
             {/* 선택된 색상 오버레이 */}
             {isAActive && (
               <div
+                key={animationKey}
                 className="absolute inset-0 z-[2] bg-gradient-to-br from-blue-500 to-blue-600"
                 style={
-                  isJustVoted && !fillPlayed
+                  isAnimating
                     ? { animation: `fillUp ${ANIM_MS}ms cubic-bezier(0.4, 0, 0.2, 1) forwards`, transformOrigin: 'bottom' }
                     : { opacity: 1 }
                 }
+                onAnimationEnd={handleAnimationEnd}
               />
             )}
-            <div className={`relative z-[10] h-full flex flex-col items-center p-3 sm:p-4 gap-1 sm:gap-2 ${
-              showNumbers ? "justify-center" : "justify-center"
-            }`}>
+            
+            <div className="relative z-[10] h-full flex flex-col items-center p-3 sm:p-4 gap-1 sm:gap-2 justify-center">
               <div className={`text-3xl sm:text-4xl md:text-5xl transition-transform duration-300 ${isAActive ? "scale-110 animate-emojiBounce" : ""}`}>
                 {config.left.emoji ?? ""}
               </div>
               <div className={`text-sm sm:text-base md:text-lg font-semibold ${isAActive ? "text-white" : "text-gray-800"}`}>
                 {config.left.label}
               </div>
-              {showNumbers && (
-                <div className={`transition-opacity duration-200 ${isAActive ? "text-white" : "text-gray-900"}`}>
+              {showResult && (
+                <div 
+                  className={`transition-opacity duration-300 ${isAActive ? "text-white" : "text-gray-900"}`}
+                  style={{ opacity: numbersOpacity }}
+                >
                   <div className="text-xl sm:text-2xl font-bold mb-0.5">{animatedPercentA}%</div>
                   <div className={`text-xs ${isAActive ? "text-blue-100" : "text-gray-600"}`}>{animatedVotesA.toLocaleString()} votes</div>
                 </div>
               )}
             </div>
+            
             {isAActive && <div className="absolute inset-0 z-[4] ring-4 ring-blue-400 ring-offset-4 ring-offset-transparent rounded-[1.5rem] sm:rounded-[2rem] pointer-events-none" />}
             {voteEffect === "A" && (
               <div
@@ -565,43 +493,47 @@ export default function PollClient({
                 <div className="animate-ringSweep w-full h-full" />
               </div>
             )}
-            {/* 배경 - 항상 표시 */}
+            
+            {/* 배경 */}
             <div className="absolute inset-0 z-0 bg-neutral-50" />
             
             {/* hover 효과 */}
             {!showResult && (
-              <div
-                className="absolute inset-0 z-[1] pointer-events-none overflow-hidden bg-gradient-to-br from-purple-400/40 to-purple-500/30 opacity-0 group-hover:opacity-100 transition-opacity duration-200"
-              />
+              <div className="absolute inset-0 z-[1] pointer-events-none overflow-hidden bg-gradient-to-br from-purple-400/40 to-purple-500/30 opacity-0 group-hover:opacity-100 transition-opacity duration-200" />
             )}
             
             {/* 선택된 색상 오버레이 */}
             {isBActive && (
               <div
+                key={animationKey}
                 className="absolute inset-0 z-[2] bg-gradient-to-br from-purple-500 to-purple-600"
                 style={
-                  isJustVoted && !fillPlayed
+                  isAnimating
                     ? { animation: `fillUp ${ANIM_MS}ms cubic-bezier(0.4, 0, 0.2, 1) forwards`, transformOrigin: 'bottom' }
                     : { opacity: 1 }
                 }
+                onAnimationEnd={handleAnimationEnd}
               />
             )}
-            <div className={`relative z-[10] h-full flex flex-col items-center p-3 sm:p-4 gap-1 sm:gap-2 ${
-              showNumbers ? "justify-center" : "justify-center"
-            }`}>
+            
+            <div className="relative z-[10] h-full flex flex-col items-center p-3 sm:p-4 gap-1 sm:gap-2 justify-center">
               <div className={`text-3xl sm:text-4xl md:text-5xl transition-transform duration-300 ${isBActive ? "scale-110 animate-emojiBounce" : ""}`}>
                 {config.right.emoji ?? ""}
               </div>
               <div className={`text-sm sm:text-base md:text-lg font-semibold ${isBActive ? "text-white" : "text-gray-800"}`}>
                 {config.right.label}
               </div>
-              {showNumbers && (
-                <div className={`transition-opacity duration-200 ${isBActive ? "text-white" : "text-gray-900"}`}>
+              {showResult && (
+                <div 
+                  className={`transition-opacity duration-300 ${isBActive ? "text-white" : "text-gray-900"}`}
+                  style={{ opacity: numbersOpacity }}
+                >
                   <div className="text-xl sm:text-2xl font-bold mb-0.5">{animatedPercentB}%</div>
                   <div className={`text-xs ${isBActive ? "text-purple-100" : "text-gray-600"}`}>{animatedVotesB.toLocaleString()} votes</div>
                 </div>
               )}
             </div>
+            
             {isBActive && <div className="absolute inset-0 z-[4] ring-4 ring-purple-400 ring-offset-4 ring-offset-transparent rounded-[1.5rem] sm:rounded-[2rem] pointer-events-none" />}
             {voteEffect === "B" && (
               <div
@@ -619,15 +551,15 @@ export default function PollClient({
               style={{ animationDelay: "200ms" }}
             >
               총 <span className="inline-block">{animatedTotal.toLocaleString()}</span>명 참여
-          </p>
-          <Link 
-            href="/history" 
+            </p>
+            <Link 
+              href="/history" 
               className="inline-block text-xs text-gray-400 hover:text-gray-600 transition-all duration-200 hover:scale-105 animate-fadeInSlideUp"
               style={{ animationDelay: "350ms" }}
-          >
+            >
               이전 설문 결과 보기 →
-          </Link>
-        </div>
+            </Link>
+          </div>
         )}
       </div>
     </div>
