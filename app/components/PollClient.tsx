@@ -29,9 +29,7 @@ export default function PollClient({
   const [votes, setVotes] = useState<VoteData>(initialVotes);
   const [selected, setSelected] = useState<"A" | "B" | null>(initialUserVote);
   const [showResult, setShowResult] = useState(initialUserVote !== null);
-  const [synced, setSynced] = useState(false);
   const [isVisible, setIsVisible] = useState(false);
-  const [isUpdating, setIsUpdating] = useState(false);
 
   // ===== 애니메이션 제어 =====
   const [animationKey, setAnimationKey] = useState(0);
@@ -93,7 +91,6 @@ export default function PollClient({
   // 파생값
   const isAActive = selected === "A";
   const isBActive = selected === "B";
-  const canShowStats = showResult;
 
   // ===== 등장 애니메이션 =====
   useEffect(() => {
@@ -191,8 +188,6 @@ export default function PollClient({
     isFetchingRef.current = true;
     
     try {
-      setIsUpdating(true);
-      
       const res = await fetch("/api/vote", { cache: "no-store" });
       const data = await res.json();
       if (!data?.success) return;
@@ -202,7 +197,6 @@ export default function PollClient({
       const voteChanged = prev.A !== v.A || prev.B !== v.B;
       
       setVotes(v); // 이후 latestVotesRef가 업데이트됨
-      setSynced(true);
 
       // 애니메이션 값 업데이트
       const newTotal = v.A + v.B;
@@ -243,7 +237,6 @@ export default function PollClient({
         hasShownResultRef.current = false;
         setSelected(null);
         setShowResult(false);
-        setSynced(false);
         setNumbersOpacity(0);
         
         // 투표하지 않은 상태이므로 latest도 제거
@@ -253,7 +246,6 @@ export default function PollClient({
       }
     } finally {
       isFetchingRef.current = false;
-      setTimeout(() => setIsUpdating(false), 180);
     }
   }, [config?.id]); // deps를 최소화 - config.id가 바뀔 때만 함수 재생성
 
@@ -326,7 +318,6 @@ export default function PollClient({
       setAnimatedVotesA(0);
       setAnimatedVotesB(0);
       setAnimatedTotal(0);
-      setSynced(false);
 
       setShowResult(false);
       hasShownResultRef.current = false;
@@ -748,7 +739,7 @@ export default function PollClient({
           </button>
         </div>
 
-        {canShowStats && (
+        {showResult && (
           <div className="text-center flex flex-col items-center gap-2">
             <p 
               className="text-sm text-gray-400 animate-fadeInSlideUp"

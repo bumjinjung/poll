@@ -41,14 +41,6 @@ html {
   scroll-behavior: smooth;
 }
 
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-.animate-fadeIn {
-  animation: fadeIn 0.5s ease-out;
-}
 
 /* 히스토리 페이지 애니메이션 */
 @keyframes fadeInUp {
@@ -88,30 +80,12 @@ html {
   }
 }
 
-.animate-fade-in-slide-up {
-  animation: fadeInSlideUp 0.6s ease-out forwards;
-}
 
 .animate-fadeInSlideUp {
   animation: fadeInSlideUp 0.5s ease-out forwards;
   opacity: 0;
 }
 
-/* 숫자 카운트업 강조 애니메이션 */
-@keyframes pulse {
-  0%, 100% {
-    transform: scale(1);
-    opacity: 1;
-  }
-  50% {
-    transform: scale(1.05);
-    opacity: 0.8;
-  }
-}
-
-.animate-pulse-once {
-  animation: pulse 0.4s ease-out;
-}
 
 /* 이모지 바운스 애니메이션 */
 @keyframes emojiBounce {
@@ -163,19 +137,6 @@ html {
   animation: ringSweep 2s linear infinite;
 }
 
-/* 빛(shine) 효과 애니메이션 */
-@keyframes shine {
-  0% {
-    transform: translateX(-100%);
-  }
-  100% {
-    transform: translateX(100%);
-  }
-}
-
-.animate-shine {
-  animation: shine 1.5s ease-in-out infinite;
-}
 
 /* 아래부터 채워지는 애니메이션 */
 @keyframes fillUp {
@@ -189,27 +150,3 @@ html {
   }
 }
 
-.animate-fillUp {
-  animation: fillUp 0.6s ease-out forwards;
-}
-
-/* 호버 시 채워지는 애니메이션 */
-@keyframes hoverFill {
-  0% {
-    transform: scaleY(0);
-    transform-origin: bottom;
-  }
-  100% {
-    transform: scaleY(1);
-    transform-origin: bottom;
-  }
-}
-
-.animate-hoverFill {
-  animation: hoverFill 0.6s ease-out forwards;
-}
-
-/* 호버 시 채워지는 효과 */
-.group:hover .hover-fill {
-  transform: scaleY(1) !important;
-}
