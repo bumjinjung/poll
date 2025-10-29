@@ -18,21 +18,23 @@ type VoteData = { A: number; B: number };
 export default function PollClient({
   initialConfig,
   initialVotes,
+  initialUserVote,
 }: {
   initialConfig: TwoChoicePollConfig | null;
   initialVotes: VoteData;
+  initialUserVote: "A" | "B" | null;
 }) {
   // ===== 기본 상태 =====
   const [config, setConfig] = useState<TwoChoicePollConfig | null>(initialConfig);
   const [votes, setVotes] = useState<VoteData>(initialVotes);
-  const [selected, setSelected] = useState<"A" | "B" | null>(null);
-  const [showResult, setShowResult] = useState(false);
+  const [selected, setSelected] = useState<"A" | "B" | null>(initialUserVote);
+  const [showResult, setShowResult] = useState(initialUserVote !== null);
   const [isVisible, setIsVisible] = useState(false);
 
   // ===== 애니메이션 제어 =====
   const [animationKey, setAnimationKey] = useState(0);
   const [isAnimating, setIsAnimating] = useState(false);
-  const [numbersOpacity, setNumbersOpacity] = useState(0);
+  const [numbersOpacity, setNumbersOpacity] = useState(initialUserVote !== null ? 1 : 0);
   const [fillPlayed, setFillPlayed] = useState(false); // 애니메이션이 한 번 실행되었는지 추적
 
   // 애니메이션용 숫자
@@ -54,8 +56,8 @@ export default function PollClient({
   // Refs
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const bcRef = useRef<BroadcastChannel | null>(null);
-  const hasShownResultRef = useRef(false);
-  const hasVotedRef = useRef<"A" | "B" | null>(null);
+  const hasShownResultRef = useRef(initialUserVote !== null);
+  const hasVotedRef = useRef<"A" | "B" | null>(initialUserVote);
   const isVotingInProgressRef = useRef(false);
   const isFetchingRef = useRef(false);
   const hasInitializedRef = useRef(false);
@@ -304,26 +306,20 @@ export default function PollClient({
   }, [showResult]);
 
 
-  // poll.id 변경 시 로컬 확인 → 표시
+  // poll.id 변경 시 상태 초기화 (서버에서 이미 확인했으므로 localStorage는 보조적)
   useEffect(() => {
     if (!config?.id) return;
-    setSelected(null);
-    setShowResult(false);
-    setNumbersOpacity(0);
-    hasShownResultRef.current = false;
-    hasVotedRef.current = null;
+    
+    // poll.id가 바뀌면 서버에서 받은 초기값으로 리셋
+    setSelected(initialUserVote);
+    setShowResult(initialUserVote !== null);
+    setNumbersOpacity(initialUserVote !== null ? 1 : 0);
+    hasShownResultRef.current = initialUserVote !== null;
+    hasVotedRef.current = initialUserVote;
     setIsAnimating(false);
     setFillPlayed(false);
     setAnimationKey(0);
-
-    let voted = false;
-    try { voted = localStorage.getItem(`voted:${config.id}`) === '1'; } catch {}
-    if (voted) {
-      setShowResult(true);
-      setNumbersOpacity(1);
-      hasShownResultRef.current = true;
-    }
-  }, [config?.id]);
+  }, [config?.id, initialUserVote]);
 
   // 서버에서만 투표 상태 확인 (최초 진입만)
   useEffect(() => {

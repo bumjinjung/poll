@@ -1,5 +1,5 @@
-import { NextResponse } from "next/server";
-import { addVote, getVoteData, getPollData, checkUserVoted, recordUserVote } from "@/lib/kv";
+import { NextRequest, NextResponse } from "next/server";
+import { addVote, getVoteData, getPollData, checkUserVoted, recordUserVote, checkAndPromoteTomorrowPoll } from "@/lib/kv";
 import { cookies } from "next/headers";
 import crypto from "crypto";
 
@@ -27,8 +27,10 @@ async function getUserId(): Promise<string> {
 }
 
 // 투표하기
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   try {
+    await checkAndPromoteTomorrowPoll(); // ✅ 자정 승격 보장
+    
     // Content-Type 확인
     const contentType = req.headers.get("content-type");
     if (!contentType || !contentType.includes("application/json")) {
@@ -48,9 +50,11 @@ export async function POST(req: Request) {
     }
 
     let choice: string;
+    let bodyPollId: string | undefined;
     try {
       const body = JSON.parse(text);
       choice = body.choice;
+      bodyPollId = body.pollId;
     } catch (parseError) {
       console.error("JSON parse error:", parseError, "Body:", text);
       return NextResponse.json(
@@ -66,9 +70,6 @@ export async function POST(req: Request) {
       );
     }
 
-    // 사용자 ID 가져오기
-    const userId = await getUserId();
-
     // 현재 설문 가져오기
     const currentPoll = await getPollData();
     if (!currentPoll) {
@@ -77,6 +78,18 @@ export async function POST(req: Request) {
         { status: 404 }
       );
     }
+
+    // pollId 유효성 검증
+    const pollId = bodyPollId || currentPoll.id;
+    if (pollId !== currentPoll.id) {
+      return NextResponse.json(
+        { success: false, message: "잘못된 설문조사 ID입니다" },
+        { status: 400 }
+      );
+    }
+
+    // 사용자 ID 가져오기
+    const userId = await getUserId();
 
     // 이미 투표했는지 확인 (poll ID 기반)
     const userVote = await checkUserVoted(userId, currentPoll.id);
@@ -93,7 +106,7 @@ export async function POST(req: Request) {
     // 사용자 투표 기록 (poll ID 기반)
     await recordUserVote(userId, currentPoll.id, choice);
 
-    const response = NextResponse.json({ success: true, votes });
+    const response = NextResponse.json({ success: true, votes, pollId: currentPoll.id });
     
     // 쿠키 설정 (1년 유지)
     const cookieStore = await cookies();
@@ -120,14 +133,34 @@ export async function POST(req: Request) {
 }
 
 // 투표 결과 조회
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
+    await checkAndPromoteTomorrowPoll(); // ✅ 자정 승격 보장
+    
+    const { searchParams } = new URL(req.url);
+    const pollId = searchParams.get('pollId') || (await getPollData())?.id || "";
+    
     const votes = await getVoteData();
     
     // 현재 설문 가져오기
     const currentPoll = await getPollData();
     if (!currentPoll) {
-      const response = NextResponse.json({ success: true, votes, userVote: null });
+      const response = NextResponse.json({ success: true, votes, userVote: null, pollId });
+      response.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
+      response.headers.set('Pragma', 'no-cache');
+      response.headers.set('Expires', '0');
+      return response;
+    }
+    
+    // pollId 유효성 검증
+    if (pollId && pollId !== currentPoll.id) {
+      // 요청된 pollId가 현재 poll과 다르면 투표하지 않은 것으로 처리
+      const response = NextResponse.json({ 
+        success: true, 
+        votes, 
+        userVote: null,
+        pollId: currentPoll.id
+      });
       response.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
       response.headers.set('Pragma', 'no-cache');
       response.headers.set('Expires', '0');
@@ -143,7 +176,8 @@ export async function GET() {
     const response = NextResponse.json({ 
       success: true, 
       votes, 
-      userVote: userVote ? userVote.choice : null 
+      userVote: userVote ? userVote.choice : null,
+      pollId: currentPoll.id
     });
     
     // 쿠키 설정 (조회 시에도 쿠키가 없으면 생성)
