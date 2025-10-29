@@ -164,6 +164,17 @@ export async function resetVotes(): Promise<void> {
   await kv.set("poll:votes:B", 0);
 }
 
+// 투표 초기화 및 사용자 투표 기록 무효화 (버전 네임스페이스 증가)
+export async function resetVotesAndInvalidateUsers(pollId: string): Promise<void> {
+  // 투표 수 초기화
+  await resetVotes();
+  
+  // 버전 네임스페이스 증가 (기존 사용자 투표 기록 무효화)
+  await incrementVersion();
+  
+  console.log(`Votes reset and user records invalidated for poll: ${pollId}, new version: ${await getCurrentVersion()}`);
+}
+
 // ========== 내일 Poll 관련 함수 ==========
 
 // 내일 poll 가져오기
@@ -328,7 +339,7 @@ export async function checkAndPromoteTomorrowPoll(): Promise<boolean> {
     
     await setPollData(promotedPoll);
     await deleteTomorrowPoll();
-    await resetVotes();
+    await resetVotesAndInvalidateUsers(newPollId);
     await setLastUpdateDate(today);
     return true;
   }
@@ -338,11 +349,40 @@ export async function checkAndPromoteTomorrowPoll(): Promise<boolean> {
   return false;
 }
 
-// ========== 사용자 중복 투표 방지 (UUID + Poll ID 기반) ==========
+// ========== 사용자 중복 투표 방지 (UUID + Poll ID + Version 기반) ==========
 
-// 사용자가 특정 poll에 이미 투표했는지 확인
+// 현재 버전 네임스페이스 가져오기
+async function getCurrentVersion(): Promise<number> {
+  const key = "poll:version";
+  
+  if (isDev) {
+    return devStore.get(key) || 0;
+  }
+  
+  const version = await kv.get<number>(key);
+  return version || 0;
+}
+
+// 버전 네임스페이스 증가
+async function incrementVersion(): Promise<number> {
+  const key = "poll:version";
+  const currentVersion = await getCurrentVersion();
+  const newVersion = currentVersion + 1;
+  
+  if (isDev) {
+    devStore.set(key, newVersion);
+    saveDevData();
+  } else {
+    await kv.set(key, newVersion);
+  }
+  
+  return newVersion;
+}
+
+// 사용자가 특정 poll에 이미 투표했는지 확인 (버전 기반)
 export async function checkUserVoted(userId: string, pollId: string): Promise<UserVoteRecord | null> {
-  const key = `vote:user:${userId}:poll:${pollId}`;
+  const currentVersion = await getCurrentVersion();
+  const key = `vote:${currentVersion}:user:${userId}:poll:${pollId}`;
   
   if (isDev) {
     const record = devStore.get(key) as UserVoteRecord | undefined;
@@ -353,9 +393,10 @@ export async function checkUserVoted(userId: string, pollId: string): Promise<Us
   return record || null;
 }
 
-// 사용자 투표 기록 저장 (poll 단위)
+// 사용자 투표 기록 저장 (poll 단위, 버전 기반)
 export async function recordUserVote(userId: string, pollId: string, choice: "A" | "B"): Promise<void> {
-  const key = `vote:user:${userId}:poll:${pollId}`;
+  const currentVersion = await getCurrentVersion();
+  const key = `vote:${currentVersion}:user:${userId}:poll:${pollId}`;
   const record: UserVoteRecord = {
     pollId,
     choice,

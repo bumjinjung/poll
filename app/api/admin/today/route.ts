@@ -4,6 +4,7 @@ import {
   setPollData, 
   getVoteData, 
   resetVotes,
+  resetVotesAndInvalidateUsers,
   getTomorrowPoll,
   setTomorrowPoll,
   deleteTomorrowPoll,
@@ -146,9 +147,9 @@ export async function POST(req: NextRequest) {
     // 오늘 poll 저장 (기본)
     await setPollData(payload);
 
-    // 수동으로 투표 초기화 요청했을 때만 초기화
+    // 수동으로 투표 초기화 요청했을 때만 초기화 (사용자 투표 기록도 무효화)
     if (resetVotesFlag) {
-      await resetVotes();
+      await resetVotesAndInvalidateUsers(pollId);
     }
 
     return NextResponse.json({ success: true, data: payload }, {
