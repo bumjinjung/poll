@@ -1,6 +1,5 @@
 import PollClient from "./components/PollClient";
-import { getPollData, getVoteData, checkAndPromoteTomorrowPoll, checkUserVoted } from "@/lib/kv";
-import { cookies } from "next/headers";
+import { getPollData, getVoteData, checkAndPromoteTomorrowPoll } from "@/lib/kv";
 
 // 완전 비캐시 처리
 export const dynamic = "force-dynamic";
@@ -13,27 +12,11 @@ export default async function Home() {
   const initialConfig = await getPollData();
   const initialVotes = await getVoteData();
   
-  // 서버에서 사용자 투표 여부 확인
-  let initialUserVote: "A" | "B" | null = null;
-  try {
-    const cookieStore = await cookies();
-    const userId = cookieStore.get("poll_user_id")?.value;
-    
-    if (userId && initialConfig) {
-      const userVoteRecord = await checkUserVoted(userId, initialConfig.id);
-      if (userVoteRecord) {
-        initialUserVote = userVoteRecord.choice as "A" | "B";
-      }
-    }
-  } catch (error) {
-    console.error("Failed to check user vote:", error);
-  }
-  
   return (
     <PollClient 
+      key={initialConfig?.id || 'no-poll'}
       initialConfig={initialConfig} 
       initialVotes={initialVotes}
-      initialUserVote={initialUserVote}
     />
   );
 }

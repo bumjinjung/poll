@@ -18,23 +18,21 @@ type VoteData = { A: number; B: number };
 export default function PollClient({
   initialConfig,
   initialVotes,
-  initialUserVote,
 }: {
   initialConfig: TwoChoicePollConfig | null;
   initialVotes: VoteData;
-  initialUserVote: "A" | "B" | null;
 }) {
   // ===== 기본 상태 =====
   const [config, setConfig] = useState<TwoChoicePollConfig | null>(initialConfig);
   const [votes, setVotes] = useState<VoteData>(initialVotes);
-  const [selected, setSelected] = useState<"A" | "B" | null>(initialUserVote);
-  const [showResult, setShowResult] = useState(initialUserVote !== null);
+  const [selected, setSelected] = useState<"A" | "B" | null>(null);
+  const [showResult, setShowResult] = useState(false);
   const [isVisible, setIsVisible] = useState(false);
 
   // ===== 애니메이션 제어 =====
   const [animationKey, setAnimationKey] = useState(0);
   const [isAnimating, setIsAnimating] = useState(false);
-  const [numbersOpacity, setNumbersOpacity] = useState(initialUserVote !== null ? 1 : 0);
+  const [numbersOpacity, setNumbersOpacity] = useState(0);
   const [fillPlayed, setFillPlayed] = useState(false); // 애니메이션이 한 번 실행되었는지 추적
 
   // 애니메이션용 숫자
@@ -50,19 +48,17 @@ export default function PollClient({
   const [animatedVotesB, setAnimatedVotesB] = useState(initialVotes.B);
   const [animatedTotal, setAnimatedTotal] = useState(initialVotes.A + initialVotes.B);
 
-  const [questionKey, setQuestionKey] = useState(0);
   const [voteEffect, setVoteEffect] = useState<"A" | "B" | null>(null);
   const [supportsHover, setSupportsHover] = useState(true); // hover 지원 여부
 
   // Refs
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const bcRef = useRef<BroadcastChannel | null>(null);
-  const hasShownResultRef = useRef(initialUserVote !== null);
-  const hasVotedRef = useRef<"A" | "B" | null>(initialUserVote);
+  const hasShownResultRef = useRef(false);
+  const hasVotedRef = useRef<"A" | "B" | null>(null);
   const isVotingInProgressRef = useRef(false);
   const isFetchingRef = useRef(false);
   const hasInitializedRef = useRef(false);
-  const prevQuestionRef = useRef<string | null>(null);
   const senderIdRef = useRef<string>(crypto.randomUUID()); // 자신의 메시지 구분용
   const latestVotesRef = useRef(votes); // 최신 votes 값 저장
   const animTokenRef = useRef(0); // 애니메이션 취소용 토큰
@@ -188,7 +184,7 @@ export default function PollClient({
     isFetchingRef.current = true;
     
     try {
-      const res = await fetch("/api/vote", { cache: "no-store" });
+      const res = await fetch(`/api/vote?pollId=${config?.id ?? ""}`, { cache: "no-store" });
       const data = await res.json();
       if (!data?.success) return;
 
@@ -239,9 +235,11 @@ export default function PollClient({
         setShowResult(false);
         setNumbersOpacity(0);
         
-        // 투표하지 않은 상태이므로 latest도 제거
+        // 투표하지 않은 상태이므로 해당 poll.id의 투표 기록 제거
         try {
-          localStorage.removeItem('poll:voted:latest');
+          if (config?.id) {
+            localStorage.removeItem(`voted:${config.id}`);
+          }
         } catch {}
       }
     } finally {
@@ -305,50 +303,26 @@ export default function PollClient({
     }
   }, [showResult]);
 
-  // 질문 변경 시 초기화
-  useEffect(() => {
-    if (!config) return;
-    const prevQ = prevQuestionRef.current;
-    if (prevQ && prevQ !== config.question) {
-      prevQuestionRef.current = config.question;
-      setQuestionKey((k) => k + 1);
 
-      setAnimatedPercentA(0);
-      setAnimatedPercentB(0);
-      setAnimatedVotesA(0);
-      setAnimatedVotesB(0);
-      setAnimatedTotal(0);
-
-      setShowResult(false);
-      hasShownResultRef.current = false;
-      hasVotedRef.current = null;
-      setNumbersOpacity(0);
-      hasInitializedRef.current = false;
-      setAnimationKey(0);
-      setIsAnimating(false);
-      setFillPlayed(false); // 애니메이션 플래그 초기화
-      
-      // 질문 변경 시 투표 상태 초기화
-      try {
-        localStorage.removeItem('poll:voted:latest');
-      } catch {}
-
-      fetchVotesAndConfig();
-    } else if (!prevQuestionRef.current) {
-      prevQuestionRef.current = config.question;
-    }
-  }, [config?.question, fetchVotesAndConfig]);
-
-  // mount 또는 config.id 바뀔 때 localStorage에서 투표 여부 확인
+  // poll.id 변경 시 로컬 확인 → 표시
   useEffect(() => {
     if (!config?.id) return;
+    setSelected(null);
+    setShowResult(false);
+    setNumbersOpacity(0);
+    hasShownResultRef.current = false;
+    hasVotedRef.current = null;
+    setIsAnimating(false);
+    setFillPlayed(false);
+    setAnimationKey(0);
+
     let voted = false;
-    try {
-      voted = localStorage.getItem(`poll:voted:${config.id}`) === '1';
-    } catch {}
-    setShowResult(voted);
-    setNumbersOpacity(voted ? 1 : 0);
-    hasShownResultRef.current = voted;
+    try { voted = localStorage.getItem(`voted:${config.id}`) === '1'; } catch {}
+    if (voted) {
+      setShowResult(true);
+      setNumbersOpacity(1);
+      hasShownResultRef.current = true;
+    }
   }, [config?.id]);
 
   // 서버에서만 투표 상태 확인 (최초 진입만)
@@ -430,6 +404,7 @@ export default function PollClient({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ choice }),
+        cache: "no-store"
       });
       const data = await res.json();
       
@@ -456,8 +431,7 @@ export default function PollClient({
         // localStorage에 투표 여부 저장
         try {
           if (config?.id) {
-            localStorage.setItem(`poll:voted:${config.id}`, '1');
-            localStorage.setItem('poll:voted:latest', '1'); // 최신 투표 상태 저장
+            localStorage.setItem(`voted:${config.id}`, '1');
           }
         } catch {}
         
@@ -505,8 +479,7 @@ export default function PollClient({
       // localStorage에서도 제거
       try {
         if (config?.id) {
-          localStorage.removeItem(`poll:voted:${config.id}`);
-          localStorage.removeItem('poll:voted:latest');
+          localStorage.removeItem(`voted:${config.id}`);
         }
       } catch {}
       
@@ -586,7 +559,6 @@ export default function PollClient({
       <div className="w-full max-w-4xl flex flex-col items-center gap-12 sm:gap-16 md:gap-20 transition-all duration-500 ease-out">
         <div className="text-center px-4">
           <h2
-            key={questionKey}
             className={`text-2xl sm:text-3xl md:text-4xl font-semibold text-gray-800 ${
               isVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-2"
             } transition-all duration-700`}
