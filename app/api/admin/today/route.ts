@@ -79,7 +79,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { question, left, right, resetVotesFlag, isToday, isTomorrow, deleteTomorrow } = body || {};
+    const { question, left, right, resetVotesFlag, isTomorrow, deleteTomorrow } = body || {};
 
     // 내일 poll 삭제 요청
     if (deleteTomorrow) {
@@ -104,19 +104,22 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 기존 poll이 있으면 ID 유지, 없으면 새로 생성
+    // 기존 poll이 있으면 ID 유지 (질문 수정 시에도 투표 유지)
     const existingPoll = await getPollData();
     let pollId: string;
     
     if (existingPoll && existingPoll.id) {
-      // 기존 poll ID 유지 (질문 수정 시)
+      // 기존 poll ID 유지 (질문 수정 시에도 투표 유지)
       pollId = existingPoll.id;
     } else {
-      // 새 poll ID 생성 (날짜 기반 + 랜덤)
+      // 새 poll이면 새로운 ID 생성 (날짜 기반 + 랜덤)
       const today = new Date();
-      const kstOffset = 9 * 60;
-      const kstTime = new Date(today.getTime() + kstOffset * 60 * 1000);
-      const dateStr = kstTime.toISOString().split("T")[0]; // YYYY-MM-DD
+      const dateStr = today.toLocaleDateString("ko-KR", { 
+        timeZone: "Asia/Seoul",
+        year: "numeric",
+        month: "2-digit", 
+        day: "2-digit"
+      }).replace(/\./g, "").replace(/\s/g, "-"); // YYYY-MM-DD 형식
       const randomSuffix = crypto.randomBytes(4).toString("hex");
       pollId = `poll-${dateStr}-${randomSuffix}`;
     }
@@ -143,7 +146,7 @@ export async function POST(req: NextRequest) {
     // 오늘 poll 저장 (기본)
     await setPollData(payload);
 
-    // 새 질문 등록시 투표 초기화
+    // 수동으로 투표 초기화 요청했을 때만 초기화
     if (resetVotesFlag) {
       await resetVotes();
     }

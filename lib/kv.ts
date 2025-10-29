@@ -1,6 +1,7 @@
 import { kv } from "@vercel/kv";
 import fs from "fs";
 import path from "path";
+import crypto from "crypto";
 
 // 개발 환경에서는 메모리 저장소 사용
 const isDev = process.env.NODE_ENV === "development";
@@ -213,9 +214,12 @@ export async function setLastUpdateDate(date: string): Promise<void> {
 // 한국 시간(KST) 기준 날짜 가져오기
 function getKSTDate(): string {
   const now = new Date();
-  const kstOffset = 9 * 60; // KST는 UTC+9
-  const kstTime = new Date(now.getTime() + kstOffset * 60 * 1000);
-  return kstTime.toISOString().split("T")[0]; // YYYY-MM-DD
+  return now.toLocaleDateString("ko-KR", { 
+    timeZone: "Asia/Seoul",
+    year: "numeric",
+    month: "2-digit", 
+    day: "2-digit"
+  }).replace(/\./g, "").replace(/\s/g, "-"); // YYYY-MM-DD 형식
 }
 
 function getTodayDate(): string {
@@ -313,7 +317,16 @@ export async function checkAndPromoteTomorrowPoll(): Promise<boolean> {
   // 내일 poll이 있으면 오늘 poll로 승격
   const tomorrowPoll = await getTomorrowPoll();
   if (tomorrowPoll) {
-    await setPollData(tomorrowPoll);
+    // 새로운 Poll ID 생성 (날짜 기반 + 랜덤)
+    const randomSuffix = crypto.randomBytes(4).toString("hex");
+    const newPollId = `poll-${today}-${randomSuffix}`;
+    
+    const promotedPoll = {
+      ...tomorrowPoll,
+      id: newPollId
+    };
+    
+    await setPollData(promotedPoll);
     await deleteTomorrowPoll();
     await resetVotes();
     await setLastUpdateDate(today);
