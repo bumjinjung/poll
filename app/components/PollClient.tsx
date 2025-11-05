@@ -299,24 +299,14 @@ export default function PollClient({
     // 투표 진행 중 플래그 설정
     isVotingInProgressRef.current = true;
     
-    // 폴링 일시 중지 (300ms 후 재개)
+    // 폴링 일시 중지
     if (pollIntervalRef.current) {
       clearInterval(pollIntervalRef.current);
       pollIntervalRef.current = null;
     }
-    cooldownUntilRef.current = Date.now() + 300;
-    setTimeout(() => {
-      cooldownUntilRef.current = 0;
-      if (!pollIntervalRef.current) {
-        const tick = () => {
-          if (document.hidden) return;
-          if (isVotingInProgressRef.current) return;
-          if (Date.now() < cooldownUntilRef.current) return;
-          fetchVotesAndConfig();
-        };
-        pollIntervalRef.current = setInterval(tick, 5000);
-      }
-    }, 300);
+    
+    // 최소 2초간 폴링 차단 (서버 응답 + 안정화 시간)
+    cooldownUntilRef.current = Date.now() + 2000;
     
     // 투표 직후 UI 세팅
     setSelected(choice);
@@ -365,8 +355,22 @@ export default function PollClient({
         // 숫자 바로 표시
         setNumbersOpacity(1);
         
-        // 투표 완료
+        // 투표 완료 플래그 해제
         isVotingInProgressRef.current = false;
+        
+        // 폴링 재시작 (2초 후)
+        setTimeout(() => {
+          cooldownUntilRef.current = 0;
+          if (!pollIntervalRef.current) {
+            const tick = () => {
+              if (document.hidden) return;
+              if (isVotingInProgressRef.current) return;
+              if (Date.now() < cooldownUntilRef.current) return;
+              fetchVotesAndConfig();
+            };
+            pollIntervalRef.current = setInterval(tick, 5000);
+          }
+        }, 2000);
         
         // localStorage에 투표 여부 저장
         try {
@@ -400,8 +404,17 @@ export default function PollClient({
         }
       } catch {}
       
-      // 쿨다운 해제하고 폴링 정상화
+      // 쿨다운 해제하고 폴링 재시작
       cooldownUntilRef.current = 0;
+      if (!pollIntervalRef.current) {
+        const tick = () => {
+          if (document.hidden) return;
+          if (isVotingInProgressRef.current) return;
+          if (Date.now() < cooldownUntilRef.current) return;
+          fetchVotesAndConfig();
+        };
+        pollIntervalRef.current = setInterval(tick, 5000);
+      }
       
       // 서버 상태 확인
       fetchVotesAndConfig();
