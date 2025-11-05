@@ -62,6 +62,8 @@ export default function PollClient({
   const latestVotesRef = useRef(votes); // 최신 votes 값 저장
   const animTokenRef = useRef(0); // 애니메이션 취소용 토큰
   const cooldownUntilRef = useRef(0); // 쿨다운 타임스탬프 (애니메이션 진행 중 fetch 차단용)
+  const pendingVoteChoiceRef = useRef<"A" | "B" | null>(null); // 투표 POST 완료 전 임시 선택값
+  const pendingVoteUntilRef = useRef(0); // pending 유지 만료 시각 (ms)
   
   // animatedVotes 값들의 최신 참조 (fetchVotesAndConfig에서 사용)
   const animARef = useRef(animatedVotesA);
@@ -190,6 +192,10 @@ export default function PollClient({
       if (data.userVote) {
         hasVotedRef.current = data.userVote;
         setSelected(data.userVote);
+        
+        // 서버가 사용자 투표를 확인했으므로 pending 해제
+        pendingVoteChoiceRef.current = null;
+        pendingVoteUntilRef.current = 0;
 
         if (!hasShownResultRef.current) {
           setShowResult(true);
@@ -201,6 +207,12 @@ export default function PollClient({
           setNumbersOpacity(1);
         }
       } else {
+        // 투표 직후 아직 서버가 반영 전이면(GET이 늦게 도착) 선택 상태를 유지
+        if (pendingVoteChoiceRef.current && Date.now() < pendingVoteUntilRef.current) {
+          // votes 숫자 업데이트만 유지하고 선택/결과 상태는 건드리지 않음
+          return;
+        }
+        
         hasVotedRef.current = null;
         hasShownResultRef.current = false;
         setSelected(null);
@@ -299,6 +311,10 @@ export default function PollClient({
     // 투표 진행 중 플래그 설정
     isVotingInProgressRef.current = true;
     
+    // 투표 pending 표시 (최대 3초 동안 GET userVote=null 무시)
+    pendingVoteChoiceRef.current = choice;
+    pendingVoteUntilRef.current = Date.now() + 3000;
+    
     // 폴링 일시 중지
     if (pollIntervalRef.current) {
       clearInterval(pollIntervalRef.current);
@@ -354,6 +370,8 @@ export default function PollClient({
         
         // 투표 완료 플래그 해제
         isVotingInProgressRef.current = false;
+        pendingVoteChoiceRef.current = null;
+        pendingVoteUntilRef.current = 0;
         
         // 폴링 재시작
         if (!pollIntervalRef.current) {
@@ -390,6 +408,8 @@ export default function PollClient({
       hasVotedRef.current = null;
       hasShownResultRef.current = false;
       isVotingInProgressRef.current = false;
+      pendingVoteChoiceRef.current = null;
+      pendingVoteUntilRef.current = 0;
       
       // localStorage에서도 제거
       try {
