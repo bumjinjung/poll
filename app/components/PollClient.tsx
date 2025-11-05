@@ -345,18 +345,15 @@ export default function PollClient({
     
     navigator.vibrate?.(20);
     
-    // 진행 중인 모든 숫자 카운팅 애니메이션 즉시 취소
-    cancelAllAnimations();
-    
     // 애니메이션 진행 중 플래그 설정
     isVotingInProgressRef.current = true;
     setIsAnimating(true);
-    setFillPlayed(false); // 새로운 투표이므로 초기화
+    setFillPlayed(false);
     
     // 폴링 일시 중지 (ANIM_MS + 300ms 후 재개)
     pausePollingForAnimation();
     
-    // 투표 직후 UI 세팅
+    // 투표 직후 UI 세팅 (애니메이션만 시작)
     setSelected(choice);
     setShowResult(true);
     setAnimationKey(prev => prev + 1);
@@ -365,15 +362,8 @@ export default function PollClient({
     // 투표 효과
     setVoteEffect(choice);
     setTimeout(() => setVoteEffect(null), ANIM_MS);
-    
-    // 숫자는 애니메이션 끝나기 조금 전(ANIM_MS - 200ms)에 표시
-    const numbersRevealTimer = setTimeout(() => {
-      if (isVotingInProgressRef.current) {
-        setNumbersOpacity(1);
-      }
-    }, ANIM_MS - 200);
 
-    // 애니메이션 종료 폴백 (혹시 onAnimationEnd가 안 불릴 경우 대비)
+    // 애니메이션 종료 폴백
     endFallbackTimerRef.current = setTimeout(() => {
       if (isAnimating) {
         setIsAnimating(false);
@@ -382,29 +372,10 @@ export default function PollClient({
       }
     }, ANIM_MS + 200);
     
-    // ✅ Optimistic update: 예상되는 최종 값을 미리 계산하여 설정
-    // 네트워크 지연 중 폴링이 실행되어도 카운팅 애니메이션이 발생하지 않도록
-    const previousVotes = votes; // 에러 시 롤백용
+    // 에러 시 롤백용
     const previousSelected = selected;
     const previousShowResult = showResult;
     const previousFillPlayed = fillPlayed;
-    
-    const optimisticVotes = {
-      A: choice === "A" ? votes.A + 1 : votes.A,
-      B: choice === "B" ? votes.B + 1 : votes.B,
-    };
-    const optimisticTotal = optimisticVotes.A + optimisticVotes.B;
-    const optimisticPercentA = optimisticTotal ? Math.round((optimisticVotes.A / optimisticTotal) * 100) : 0;
-    const optimisticPercentB = optimisticTotal ? 100 - optimisticPercentA : 0;
-    
-    // 즉시 ref와 state 업데이트 (폴링이 실행되어도 변경 감지 안 됨)
-    setVotes(optimisticVotes);
-    latestVotesRef.current = optimisticVotes;
-    setAnimatedVotesA(optimisticVotes.A);
-    setAnimatedVotesB(optimisticVotes.B);
-    setAnimatedTotal(optimisticTotal);
-    setAnimatedPercentA(optimisticPercentA);
-    setAnimatedPercentB(optimisticPercentB);
 
     try {
       const res = await fetch("/api/vote", {
@@ -418,7 +389,7 @@ export default function PollClient({
       if (data.success && data.votes) {
         // 서버 응답으로 상태 업데이트
         setVotes(data.votes);
-        latestVotesRef.current = data.votes; // 즉시 ref 업데이트하여 다음 fetch에서 변경 감지 안 되게
+        latestVotesRef.current = data.votes;
         setSelected(choice);
         hasVotedRef.current = choice;
         hasShownResultRef.current = true;
@@ -428,22 +399,22 @@ export default function PollClient({
         const pA = tot ? Math.round((data.votes.A / tot) * 100) : 0;
         const pB = tot ? 100 - pA : 0;
         
-        // 서버 응답 값으로 ref만 업데이트 (애니메이션 값은 이미 optimistic으로 설정됨)
-        // state를 업데이트하면 리렌더링으로 인해 애니메이션이 중복 실행될 수 있음
+        // 서버 값으로 업데이트
+        setAnimatedVotesA(data.votes.A);
+        setAnimatedVotesB(data.votes.B);
+        setAnimatedTotal(tot);
+        setAnimatedPercentA(pA);
+        setAnimatedPercentB(pB);
+        
+        // ref도 업데이트
         animARef.current = data.votes.A;
         animBRef.current = data.votes.B;
         animTotalRef.current = tot;
         animPARef.current = pA;
         animPBRef.current = pB;
         
-        // optimistic과 서버 값이 다른 경우에만 state 업데이트 (동시 투표 등)
-        if (data.votes.A !== optimisticVotes.A || data.votes.B !== optimisticVotes.B) {
-          setAnimatedVotesA(data.votes.A);
-          setAnimatedVotesB(data.votes.B);
-          setAnimatedTotal(tot);
-          setAnimatedPercentA(pA);
-          setAnimatedPercentB(pB);
-        }
+        // 숫자 표시
+        setNumbersOpacity(1);
         
         // localStorage에 투표 여부 저장
         try {
@@ -462,8 +433,7 @@ export default function PollClient({
     } catch (error) {
       console.error("투표 실패:", error);
       
-      // 타이머들 취소
-      clearTimeout(numbersRevealTimer);
+      // 타이머 취소
       if (endFallbackTimerRef.current) {
         clearTimeout(endFallbackTimerRef.current);
         endFallbackTimerRef.current = null;
@@ -478,20 +448,6 @@ export default function PollClient({
       setIsAnimating(false);
       isVotingInProgressRef.current = false;
       setFillPlayed(previousFillPlayed);
-      
-      // optimistic update 롤백
-      setVotes(previousVotes);
-      latestVotesRef.current = previousVotes;
-      
-      // 애니메이션 값도 롤백
-      const prevTotal = previousVotes.A + previousVotes.B;
-      const prevPercentA = prevTotal ? Math.round((previousVotes.A / prevTotal) * 100) : 0;
-      const prevPercentB = prevTotal ? 100 - prevPercentA : 0;
-      setAnimatedVotesA(previousVotes.A);
-      setAnimatedVotesB(previousVotes.B);
-      setAnimatedTotal(prevTotal);
-      setAnimatedPercentA(prevPercentA);
-      setAnimatedPercentB(prevPercentB);
       
       // localStorage에서도 제거
       try {
