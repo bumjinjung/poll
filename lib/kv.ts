@@ -103,6 +103,16 @@ export async function setPollData(data: PollData): Promise<void> {
   await kv.set("poll:today", data);
 }
 
+// 설문 질문 삭제
+export async function deletePollData(): Promise<void> {
+  if (isDev) {
+    devStore.delete("poll:today");
+    saveDevData();
+    return;
+  }
+  await kv.del("poll:today");
+}
+
 // 투표 결과 가져오기
 export async function getVoteData(): Promise<VoteData> {
   if (isDev) {
@@ -344,7 +354,9 @@ export async function checkAndPromoteTomorrowPoll(): Promise<boolean> {
     return true;
   }
 
-  // 내일 poll이 없어도 날짜는 업데이트
+  // 내일 poll이 없으면 오늘 poll 삭제 (빈 화면으로)
+  await deletePollData();
+  await resetVotes(); // 투표도 초기화
   await setLastUpdateDate(today);
   return false;
 }

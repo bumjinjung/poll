@@ -73,11 +73,7 @@ function HistoryItemWithAnimation({
             <span className="text-xs text-gray-400 bg-gray-100 px-2 py-1 rounded-full">{total.toLocaleString()}명 참여</span>
           </div>
           <button
-            onClick={() => {
-              if (confirm(`정말로 ${item.date} 히스토리를 삭제하시겠습니까?`)) {
-                onDelete(item.date);
-              }
-            }}
+            onClick={() => onDelete(item.date)}
             className="px-3 py-1 bg-red-500 text-white text-xs rounded-full hover:bg-red-600 transition-colors"
             title="삭제"
           >
@@ -544,7 +540,8 @@ export default function AdminPage() {
       
       if (data.success) {
         setMessage(`✅ ${data.message}`);
-        fetchHistory(true); // 히스토리 목록 새로고침
+        // UI에서 즉시 제거
+        setHistoryItems(prev => prev.filter(item => item.date !== date));
       } else {
         setMessage(`❌ ${data.message}`);
       }
@@ -556,6 +553,11 @@ export default function AdminPage() {
       }, 3500);
     } catch (error) {
       setMessage("히스토리 삭제 중 오류가 발생했습니다.");
+      setTimeout(() => setIsFadingOut(true), 3100);
+      setTimeout(() => {
+        setMessage(null);
+        setIsFadingOut(false);
+      }, 3500);
     }
   };
 
