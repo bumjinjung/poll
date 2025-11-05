@@ -428,12 +428,22 @@ export default function PollClient({
         const pA = tot ? Math.round((data.votes.A / tot) * 100) : 0;
         const pB = tot ? 100 - pA : 0;
         
-        // 서버 응답 값으로 업데이트 (optimistic과 다를 수 있음)
-        setAnimatedVotesA(data.votes.A);
-        setAnimatedVotesB(data.votes.B);
-        setAnimatedTotal(tot);
-        setAnimatedPercentA(pA);
-        setAnimatedPercentB(pB);
+        // 서버 응답 값으로 ref만 업데이트 (애니메이션 값은 이미 optimistic으로 설정됨)
+        // state를 업데이트하면 리렌더링으로 인해 애니메이션이 중복 실행될 수 있음
+        animARef.current = data.votes.A;
+        animBRef.current = data.votes.B;
+        animTotalRef.current = tot;
+        animPARef.current = pA;
+        animPBRef.current = pB;
+        
+        // optimistic과 서버 값이 다른 경우에만 state 업데이트 (동시 투표 등)
+        if (data.votes.A !== optimisticVotes.A || data.votes.B !== optimisticVotes.B) {
+          setAnimatedVotesA(data.votes.A);
+          setAnimatedVotesB(data.votes.B);
+          setAnimatedTotal(tot);
+          setAnimatedPercentA(pA);
+          setAnimatedPercentB(pB);
+        }
         
         // localStorage에 투표 여부 저장
         try {
