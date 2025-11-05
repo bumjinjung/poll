@@ -33,10 +33,7 @@ export default function PollClient({
   const [hasTomorrowPoll, setHasTomorrowPoll] = useState(false);
 
   // ===== 애니메이션 제어 =====
-  const [animationKey, setAnimationKey] = useState(0);
-  const [isAnimating, setIsAnimating] = useState(false);
   const [numbersOpacity, setNumbersOpacity] = useState(initialUserVote !== null ? 1 : 0);
-  const [fillPlayed, setFillPlayed] = useState(false); // 애니메이션이 한 번 실행되었는지 추적
 
   // 애니메이션용 숫자
   const [animatedPercentA, setAnimatedPercentA] = useState(() => {
@@ -51,7 +48,6 @@ export default function PollClient({
   const [animatedVotesB, setAnimatedVotesB] = useState(initialVotes.B);
   const [animatedTotal, setAnimatedTotal] = useState(initialVotes.A + initialVotes.B);
 
-  const [voteEffect, setVoteEffect] = useState<"A" | "B" | null>(null);
   const [supportsHover, setSupportsHover] = useState(true); // hover 지원 여부
 
   // Refs
@@ -66,7 +62,6 @@ export default function PollClient({
   const latestVotesRef = useRef(votes); // 최신 votes 값 저장
   const animTokenRef = useRef(0); // 애니메이션 취소용 토큰
   const cooldownUntilRef = useRef(0); // 쿨다운 타임스탬프 (애니메이션 진행 중 fetch 차단용)
-  const endFallbackTimerRef = useRef<NodeJS.Timeout | null>(null); // 애니메이션 종료 폴백 타이머
   
   // animatedVotes 값들의 최신 참조 (fetchVotesAndConfig에서 사용)
   const animARef = useRef(animatedVotesA);
@@ -130,54 +125,6 @@ export default function PollClient({
     requestAnimationFrame(step);
   };
 
-  // ===== 폴링 일시중지 및 재개 유틸 =====
-  const pausePollingForAnimation = useCallback(() => {
-    // 기존 폴링 중단
-    if (pollIntervalRef.current) {
-      clearInterval(pollIntervalRef.current);
-      pollIntervalRef.current = null;
-    }
-    
-    // 쿨다운 설정 (ANIM_MS + 300ms)
-    cooldownUntilRef.current = Date.now() + ANIM_MS + 300;
-    
-    // 애니메이션 종료 후 폴링 재개
-    setTimeout(() => {
-      cooldownUntilRef.current = 0;
-      
-      // 폴링 재시작
-      if (!pollIntervalRef.current) {
-        const tick = () => {
-          if (document.hidden) return;
-          if (isVotingInProgressRef.current) return;
-          if (Date.now() < cooldownUntilRef.current) return;
-          fetchVotesAndConfig();
-        };
-        
-        pollIntervalRef.current = setInterval(tick, 5000);
-      }
-    }, ANIM_MS + 300);
-  }, []);
-
-  // ===== 애니메이션 완료 핸들러 (개선됨) =====
-  const handleAnimationEnd = useCallback((e?: React.AnimationEvent<HTMLDivElement>) => {
-    // 이 엘리먼트 자신에게서 발생한 이벤트만
-    if (e && e.currentTarget !== e.target) return;
-    // 정확히 fillUp만 처리
-    // (Tailwind 등에서 다른 animation이 섞일 가능성 방지)
-    // @ts-ignore
-    if (e?.animationName && e.animationName !== "fillUp") return;
-
-    // 폴백 타이머 취소
-    if (endFallbackTimerRef.current) {
-      clearTimeout(endFallbackTimerRef.current);
-      endFallbackTimerRef.current = null;
-    }
-
-    setIsAnimating(false);
-    isVotingInProgressRef.current = false;
-    setFillPlayed(true); // 애니메이션 완료 표시
-  }, []);
 
   // ===== 서버 통신 (deps 안정화) =====
   const fetchVotesAndConfig = useCallback(async () => {
@@ -339,9 +286,6 @@ export default function PollClient({
     setNumbersOpacity(initialUserVote !== null ? 1 : 0);
     hasShownResultRef.current = initialUserVote !== null;
     hasVotedRef.current = initialUserVote;
-    setIsAnimating(false);
-    setFillPlayed(false);
-    setAnimationKey(0);
   }, [config?.id, initialUserVote]);
 
   // hasInitializedRef는 더 이상 사용하지 않음 (tick()에서 초기 로드 처리)
@@ -352,37 +296,35 @@ export default function PollClient({
     
     navigator.vibrate?.(20);
     
-    // 애니메이션 진행 중 플래그 설정
+    // 투표 진행 중 플래그 설정
     isVotingInProgressRef.current = true;
-    setIsAnimating(true);
-    setFillPlayed(false);
     
-    // 폴링 일시 중지 (ANIM_MS + 300ms 후 재개)
-    pausePollingForAnimation();
+    // 폴링 일시 중지 (300ms 후 재개)
+    if (pollIntervalRef.current) {
+      clearInterval(pollIntervalRef.current);
+      pollIntervalRef.current = null;
+    }
+    cooldownUntilRef.current = Date.now() + 300;
+    setTimeout(() => {
+      cooldownUntilRef.current = 0;
+      if (!pollIntervalRef.current) {
+        const tick = () => {
+          if (document.hidden) return;
+          if (isVotingInProgressRef.current) return;
+          if (Date.now() < cooldownUntilRef.current) return;
+          fetchVotesAndConfig();
+        };
+        pollIntervalRef.current = setInterval(tick, 5000);
+      }
+    }, 300);
     
-    // 투표 직후 UI 세팅 (애니메이션만 시작)
+    // 투표 직후 UI 세팅
     setSelected(choice);
     setShowResult(true);
-    setAnimationKey(prev => prev + 1);
-    setNumbersOpacity(0);
-    
-    // 투표 효과
-    setVoteEffect(choice);
-    setTimeout(() => setVoteEffect(null), ANIM_MS);
-
-    // 애니메이션 종료 폴백
-    endFallbackTimerRef.current = setTimeout(() => {
-      if (isAnimating) {
-        setIsAnimating(false);
-        isVotingInProgressRef.current = false;
-        setFillPlayed(true);
-      }
-    }, ANIM_MS + 200);
     
     // 에러 시 롤백용
     const previousSelected = selected;
     const previousShowResult = showResult;
-    const previousFillPlayed = fillPlayed;
 
     try {
       const res = await fetch("/api/vote", {
@@ -420,8 +362,11 @@ export default function PollClient({
         animPARef.current = pA;
         animPBRef.current = pB;
         
-        // 숫자 표시
+        // 숫자 바로 표시
         setNumbersOpacity(1);
+        
+        // 투표 완료
+        isVotingInProgressRef.current = false;
         
         // localStorage에 투표 여부 저장
         try {
@@ -440,21 +385,13 @@ export default function PollClient({
     } catch (error) {
       console.error("투표 실패:", error);
       
-      // 타이머 취소
-      if (endFallbackTimerRef.current) {
-        clearTimeout(endFallbackTimerRef.current);
-        endFallbackTimerRef.current = null;
-      }
-      
       // 실패 시 이전 상태로 완전 롤백
       setSelected(previousSelected);
       setShowResult(previousShowResult);
       setNumbersOpacity(0);
       hasVotedRef.current = null;
       hasShownResultRef.current = false;
-      setIsAnimating(false);
       isVotingInProgressRef.current = false;
-      setFillPlayed(previousFillPlayed);
       
       // localStorage에서도 제거
       try {
@@ -572,14 +509,6 @@ export default function PollClient({
             aria-pressed={isAActive}
           >
             {isAActive && <div className="absolute inset-0 z-[3] bg-black/5 md:backdrop-blur-[1px] pointer-events-none" />}
-            {isAActive && (
-              <div
-                className="absolute inset-0 z-[3] pointer-events-none"
-                style={{ background: "conic-gradient(from 0deg, transparent, rgba(37,99,235,.3), transparent)", borderRadius: "inherit" }}
-              >
-                <div className="animate-ringSweep w-full h-full" />
-              </div>
-            )}
             
             {/* 배경 */}
             <div className="absolute inset-0 z-0 bg-neutral-50" />
@@ -591,16 +520,7 @@ export default function PollClient({
             
             {/* 선택된 색상 오버레이 */}
             {isAActive && (
-              <div
-                key={animationKey}
-                className="absolute inset-0 z-[2] bg-gradient-to-br from-blue-500 to-blue-600"
-                style={
-                  (isAnimating && !fillPlayed)
-                    ? { animation: `fillUp ${ANIM_MS}ms cubic-bezier(0.4, 0, 0.2, 1) forwards`, transformOrigin: 'bottom' }
-                    : { opacity: 1 }
-                }
-                onAnimationEnd={handleAnimationEnd}
-              />
+              <div className="absolute inset-0 z-[2] bg-gradient-to-br from-blue-500 to-blue-600 transition-opacity duration-200" />
             )}
             
             <div className="relative z-[10] h-full flex flex-col items-center p-3 sm:p-4 gap-1 sm:gap-2 justify-center">
@@ -622,12 +542,6 @@ export default function PollClient({
             </div>
             
             {isAActive && <div className="absolute inset-0 z-[4] ring-4 ring-blue-400 ring-offset-4 ring-offset-transparent rounded-[1.5rem] sm:rounded-[2rem] pointer-events-none" />}
-            {voteEffect === "A" && (
-              <div
-                className="absolute inset-0 z-[5] rounded-[1.5rem] sm:rounded-[2rem] pointer-events-none"
-                style={{ background: "radial-gradient(circle, rgba(59,130,246,.3) 0%, transparent 70%)", animation: `votePopEffect ${ANIM_MS}ms ease-out forwards` }}
-              />
-            )}
           </button>
 
           {/* B */}
@@ -643,14 +557,6 @@ export default function PollClient({
             aria-pressed={isBActive}
           >
             {isBActive && <div className="absolute inset-0 z-[3] bg-black/5 md:backdrop-blur-[1px] pointer-events-none" />}
-            {isBActive && (
-              <div
-                className="absolute inset-0 z-[3] pointer-events-none"
-                style={{ background: "conic-gradient(from 0deg, transparent, rgba(147,51,234,.3), transparent)", borderRadius: "inherit" }}
-              >
-                <div className="animate-ringSweep w-full h-full" />
-              </div>
-            )}
             
             {/* 배경 */}
             <div className="absolute inset-0 z-0 bg-neutral-50" />
@@ -662,16 +568,7 @@ export default function PollClient({
             
             {/* 선택된 색상 오버레이 */}
             {isBActive && (
-              <div
-                key={animationKey}
-                className="absolute inset-0 z-[2] bg-gradient-to-br from-purple-500 to-purple-600"
-                style={
-                  (isAnimating && !fillPlayed)
-                    ? { animation: `fillUp ${ANIM_MS}ms cubic-bezier(0.4, 0, 0.2, 1) forwards`, transformOrigin: 'bottom' }
-                    : { opacity: 1 }
-                }
-                onAnimationEnd={handleAnimationEnd}
-              />
+              <div className="absolute inset-0 z-[2] bg-gradient-to-br from-purple-500 to-purple-600 transition-opacity duration-200" />
             )}
             
             <div className="relative z-[10] h-full flex flex-col items-center p-3 sm:p-4 gap-1 sm:gap-2 justify-center">
@@ -693,12 +590,6 @@ export default function PollClient({
             </div>
             
             {isBActive && <div className="absolute inset-0 z-[4] ring-4 ring-purple-400 ring-offset-4 ring-offset-transparent rounded-[1.5rem] sm:rounded-[2rem] pointer-events-none" />}
-            {voteEffect === "B" && (
-              <div
-                className="absolute inset-0 z-[5] rounded-[1.5rem] sm:rounded-[2rem] pointer-events-none"
-                style={{ background: "radial-gradient(circle, rgba(147,51,234,.3) 0%, transparent 70%)", animation: `votePopEffect ${ANIM_MS}ms ease-out forwards` }}
-              />
-            )}
           </button>
         </div>
 
