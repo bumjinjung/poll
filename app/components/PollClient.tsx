@@ -30,6 +30,7 @@ export default function PollClient({
   const [selected, setSelected] = useState<"A" | "B" | null>(initialUserVote);
   const [showResult, setShowResult] = useState(initialUserVote !== null);
   const [isVisible, setIsVisible] = useState(false);
+  const [hasTomorrowPoll, setHasTomorrowPoll] = useState(false);
 
   // ===== 애니메이션 제어 =====
   const [animationKey, setAnimationKey] = useState(0);
@@ -189,6 +190,16 @@ export default function PollClient({
       const res = await fetch(`/api/vote?pollId=${config?.id ?? ""}`, { cache: "no-store" });
       const data = await res.json();
       if (!data?.success) return;
+
+      // config 업데이트 (null일 수 있음)
+      if (data.config !== undefined) {
+        setConfig(data.config);
+      }
+      
+      // 내일 예약 질문 여부 업데이트
+      if (data.hasTomorrowPoll !== undefined) {
+        setHasTomorrowPoll(data.hasTomorrowPoll);
+      }
 
       const v = data.votes;
       const prev = latestVotesRef.current;
@@ -537,17 +548,28 @@ export default function PollClient({
     };
   }, [forceRefreshConfig, fetchVotesAndConfig]);
 
-  if (!config) {
+  // 오늘 질문이 없고 내일 예약 질문도 없으면 "질문이 없다" 페이지 표시
+  if (!config && !hasTomorrowPoll) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center p-4 sm:p-6">
-        <div className="text-center px-4">
+        <div className="text-center px-4 flex flex-col items-center gap-6">
           <h2 className="text-2xl sm:text-3xl md:text-4xl font-semibold text-gray-400">
             설문조사가 아직 준비되지 않았습니다.
           </h2>
-          <p className="text-sm text-gray-500 mt-4">관리자 페이지에서 설정해주세요.</p>
+          <Link 
+            href="/history" 
+            className="inline-block text-sm text-gray-400 hover:text-gray-600 transition-all duration-200 hover:scale-105"
+          >
+            이전 설문 결과 보기 →
+          </Link>
         </div>
       </div>
     );
+  }
+
+  // config가 null이면 렌더링 불가 (내일 예약 질문이 있어도 현재 질문이 없으면 표시할 수 없음)
+  if (!config) {
+    return null;
   }
 
   return (

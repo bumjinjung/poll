@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { addVote, getVoteData, getPollData, checkUserVoted, recordUserVote, checkAndPromoteTomorrowPoll } from "@/lib/kv";
+import { addVote, getVoteData, getPollData, checkUserVoted, recordUserVote, checkAndPromoteTomorrowPoll, getTomorrowPoll } from "@/lib/kv";
 import { cookies } from "next/headers";
 import crypto from "crypto";
 
@@ -144,8 +144,18 @@ export async function GET(req: NextRequest) {
     
     // 현재 설문 가져오기
     const currentPoll = await getPollData();
+    // 내일 예약 질문 가져오기 (공개 API이므로 항상 확인)
+    const tomorrowPoll = await getTomorrowPoll();
+    
     if (!currentPoll) {
-      const response = NextResponse.json({ success: true, votes, userVote: null, pollId });
+      const response = NextResponse.json({ 
+        success: true, 
+        votes, 
+        userVote: null, 
+        pollId,
+        config: null,
+        hasTomorrowPoll: !!tomorrowPoll
+      });
       response.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
       response.headers.set('Pragma', 'no-cache');
       response.headers.set('Expires', '0');
@@ -159,7 +169,9 @@ export async function GET(req: NextRequest) {
         success: true, 
         votes, 
         userVote: null,
-        pollId: currentPoll.id
+        pollId: currentPoll.id,
+        config: currentPoll,
+        hasTomorrowPoll: !!tomorrowPoll
       });
       response.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
       response.headers.set('Pragma', 'no-cache');
@@ -177,7 +189,9 @@ export async function GET(req: NextRequest) {
       success: true, 
       votes, 
       userVote: userVote ? userVote.choice : null,
-      pollId: currentPoll.id
+      pollId: currentPoll.id,
+      config: currentPoll,
+      hasTomorrowPoll: !!tomorrowPoll
     });
     
     // 쿠키 설정 (조회 시에도 쿠키가 없으면 생성)
