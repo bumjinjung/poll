@@ -150,3 +150,7 @@ html {
   }
 }
 
+.animate-fillUp {
+  animation: fillUp 1s ease-out forwards;
+}
+

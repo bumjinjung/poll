@@ -34,6 +34,7 @@ export default function PollClient({
 
   // ===== 애니메이션 제어 =====
   const [numbersOpacity, setNumbersOpacity] = useState(initialUserVote !== null ? 1 : 0);
+  const [fillUp, setFillUp] = useState<"A" | "B" | null>(null); // 투표 시 채워지는 애니메이션
 
   // 애니메이션용 숫자
   const [animatedPercentA, setAnimatedPercentA] = useState(() => {
@@ -149,6 +150,7 @@ export default function PollClient({
           setSelected(null);
           setShowResult(false);
           setNumbersOpacity(0);
+          setFillUp(null);
           hasVotedRef.current = null;
           hasShownResultRef.current = false;
         }
@@ -218,6 +220,7 @@ export default function PollClient({
         setSelected(null);
         setShowResult(false);
         setNumbersOpacity(0);
+        setFillUp(null);
         
         // 투표하지 않은 상태이므로 해당 poll.id의 투표 기록 제거
         try {
@@ -296,6 +299,7 @@ export default function PollClient({
     setSelected(initialUserVote);
     setShowResult(initialUserVote !== null);
     setNumbersOpacity(initialUserVote !== null ? 1 : 0);
+    setFillUp(null);
     hasShownResultRef.current = initialUserVote !== null;
     hasVotedRef.current = initialUserVote;
   }, [config?.id, initialUserVote]);
@@ -321,9 +325,15 @@ export default function PollClient({
       pollIntervalRef.current = null;
     }
     
-    // 투표 직후 UI 세팅
+    // 애니메이션 시작
     setSelected(choice);
-    setShowResult(true);
+    setFillUp(choice);
+    
+    // 애니메이션 시간 후 결과 표시
+    setTimeout(() => {
+      setShowResult(true);
+      setFillUp(null);
+    }, ANIM_MS);
     
     // 에러 시 롤백용
     const previousSelected = selected;
@@ -405,6 +415,7 @@ export default function PollClient({
       setSelected(previousSelected);
       setShowResult(previousShowResult);
       setNumbersOpacity(0);
+      setFillUp(null);
       hasVotedRef.current = null;
       hasShownResultRef.current = false;
       isVotingInProgressRef.current = false;
@@ -544,8 +555,13 @@ export default function PollClient({
               <div className="absolute inset-0 z-[1] pointer-events-none overflow-hidden bg-gradient-to-br from-blue-400/40 to-blue-500/30 opacity-0 group-hover:opacity-100 transition-opacity duration-200" />
             )}
             
+            {/* 채워지는 애니메이션 (fillUp) */}
+            {fillUp === "A" && (
+              <div className="absolute inset-0 z-[2] bg-gradient-to-br from-blue-500 to-blue-600 animate-fillUp" />
+            )}
+            
             {/* 선택된 색상 오버레이 */}
-            {isAActive && (
+            {isAActive && !fillUp && (
               <div className="absolute inset-0 z-[2] bg-gradient-to-br from-blue-500 to-blue-600 transition-opacity duration-200" />
             )}
             
@@ -592,8 +608,13 @@ export default function PollClient({
               <div className="absolute inset-0 z-[1] pointer-events-none overflow-hidden bg-gradient-to-br from-purple-400/40 to-purple-500/30 opacity-0 group-hover:opacity-100 transition-opacity duration-200" />
             )}
             
+            {/* 채워지는 애니메이션 (fillUp) */}
+            {fillUp === "B" && (
+              <div className="absolute inset-0 z-[2] bg-gradient-to-br from-purple-500 to-purple-600 animate-fillUp" />
+            )}
+            
             {/* 선택된 색상 오버레이 */}
-            {isBActive && (
+            {isBActive && !fillUp && (
               <div className="absolute inset-0 z-[2] bg-gradient-to-br from-purple-500 to-purple-600 transition-opacity duration-200" />
             )}
             

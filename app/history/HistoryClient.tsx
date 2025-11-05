@@ -50,6 +50,22 @@ export default function HistoryClient({ initialCursor }: HistoryClientProps) {
     }
   }, [initialCursor, loadMore, items.length]);
 
+  // admin 페이지에서 히스토리 수정 알림 수신
+  useEffect(() => {
+    try {
+      const bc = new BroadcastChannel("poll_channel");
+      bc.onmessage = (event) => {
+        if (event.data.type === "history_update") {
+          // 히스토리가 업데이트되면 페이지 새로고침
+          window.location.reload();
+        }
+      };
+      return () => bc.close();
+    } catch (e) {
+      console.warn("BroadcastChannel not supported:", e);
+    }
+  }, []);
+
   if (!hasMore && items.length === 0) {
     return null; // 초기 데이터가 SSR로 이미 렌더링되었으므로
   }

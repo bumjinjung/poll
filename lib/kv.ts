@@ -333,7 +333,32 @@ export async function checkAndPromoteTomorrowPoll(): Promise<boolean> {
 
   // 자정 진입 시, 전일 결과를 히스토리로 저장 (중복 방지)
   const snapshotDate = lastUpdate || getYesterdayDate(today);
-  try { await saveHistorySnapshot(snapshotDate); } catch {}
+  const currentPoll = await getPollData();
+  const currentVotes = await getVoteData();
+  
+  // 현재 설문이 있으면 히스토리에 저장
+  if (currentPoll) {
+    const historyKey = `poll:history:${snapshotDate}`;
+    const historyItem: PollHistoryItem = {
+      date: snapshotDate,
+      poll: currentPoll,
+      votes: currentVotes
+    };
+    
+    if (isDev) {
+      // 중복 체크 후 저장
+      if (!devStore.get(historyKey)) {
+        devStore.set(historyKey, historyItem);
+        saveDevData();
+      }
+    } else {
+      // 중복 체크 후 저장
+      const exists = await kv.exists(historyKey);
+      if (!exists) {
+        await kv.set(historyKey, historyItem);
+      }
+    }
+  }
 
   // 내일 poll이 있으면 오늘 poll로 승격
   const tomorrowPoll = await getTomorrowPoll();

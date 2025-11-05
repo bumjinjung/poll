@@ -542,6 +542,15 @@ export default function AdminPage() {
         setMessage(`✅ ${data.message}`);
         // UI에서 즉시 제거
         setHistoryItems(prev => prev.filter(item => item.date !== date));
+        
+        // history 페이지에 업데이트 알림
+        try {
+          const bc = new BroadcastChannel("poll_channel");
+          bc.postMessage({ type: "history_update" });
+          bc.close();
+        } catch (e) {
+          console.warn("BroadcastChannel not supported:", e);
+        }
       } else {
         setMessage(`❌ ${data.message}`);
       }
@@ -583,6 +592,15 @@ export default function AdminPage() {
               : item
           )
         );
+        
+        // history 페이지에 업데이트 알림
+        try {
+          const bc = new BroadcastChannel("poll_channel");
+          bc.postMessage({ type: "history_update" });
+          bc.close();
+        } catch (e) {
+          console.warn("BroadcastChannel not supported:", e);
+        }
       } else {
         setMessage(`❌ ${data.message}`);
       }
