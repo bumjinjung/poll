@@ -194,6 +194,15 @@ export default function PollClient({
       // config 업데이트 (null일 수 있음)
       if (data.config !== undefined) {
         setConfig(data.config);
+        
+        // config가 null이 되면 투표 상태 초기화
+        if (data.config === null) {
+          setSelected(null);
+          setShowResult(false);
+          setNumbersOpacity(0);
+          hasVotedRef.current = null;
+          hasShownResultRef.current = false;
+        }
       }
       
       // 내일 예약 질문 여부 업데이트
@@ -207,25 +216,28 @@ export default function PollClient({
       
       setVotes(v); // 이후 latestVotesRef가 업데이트됨
 
-      // 애니메이션 값 업데이트
-      const newTotal = v.A + v.B;
-      const newPercentA = newTotal ? Math.round((v.A / newTotal) * 100) : 0;
-      const newPercentB = newTotal ? 100 - newPercentA : 0;
-      
-      if (voteChanged) {
-        // 폴링으로 값이 변경되면 카운팅 애니메이션 실행
-        animateDigitChange(animARef.current, v.A, setAnimatedVotesA);
-        animateDigitChange(animBRef.current, v.B, setAnimatedVotesB);
-        animateDigitChange(animTotalRef.current, newTotal, setAnimatedTotal);
-        animateDigitChange(animPARef.current, newPercentA, setAnimatedPercentA);
-        animateDigitChange(animPBRef.current, newPercentB, setAnimatedPercentB);
-      } else if (animTotalRef.current === 0) {
-        // 첫 로드는 즉시 값 설정 (애니메이션 없음)
-        setAnimatedVotesA(v.A);
-        setAnimatedVotesB(v.B);
-        setAnimatedTotal(newTotal);
-        setAnimatedPercentA(newPercentA);
-        setAnimatedPercentB(newPercentB);
+      // 투표 중이 아닐 때만 애니메이션 값 업데이트
+      if (!isVotingInProgressRef.current) {
+        // 애니메이션 값 업데이트
+        const newTotal = v.A + v.B;
+        const newPercentA = newTotal ? Math.round((v.A / newTotal) * 100) : 0;
+        const newPercentB = newTotal ? 100 - newPercentA : 0;
+        
+        if (voteChanged) {
+          // 폴링으로 값이 변경되면 카운팅 애니메이션 실행
+          animateDigitChange(animARef.current, v.A, setAnimatedVotesA);
+          animateDigitChange(animBRef.current, v.B, setAnimatedVotesB);
+          animateDigitChange(animTotalRef.current, newTotal, setAnimatedTotal);
+          animateDigitChange(animPARef.current, newPercentA, setAnimatedPercentA);
+          animateDigitChange(animPBRef.current, newPercentB, setAnimatedPercentB);
+        } else if (animTotalRef.current === 0) {
+          // 첫 로드는 즉시 값 설정 (애니메이션 없음)
+          setAnimatedVotesA(v.A);
+          setAnimatedVotesB(v.B);
+          setAnimatedTotal(newTotal);
+          setAnimatedPercentA(newPercentA);
+          setAnimatedPercentB(newPercentB);
+        }
       }
 
       if (data.userVote) {
@@ -332,16 +344,11 @@ export default function PollClient({
     setAnimationKey(0);
   }, [config?.id, initialUserVote]);
 
-  // 서버에서만 투표 상태 확인 (최초 진입만)
-  useEffect(() => {
-    if (!config?.question || hasInitializedRef.current) return;
-    hasInitializedRef.current = true;
-    fetchVotesAndConfig();
-  }, [config?.question, fetchVotesAndConfig]);
+  // hasInitializedRef는 더 이상 사용하지 않음 (tick()에서 초기 로드 처리)
 
   // 투표 처리
   const handleVote = async (choice: "A" | "B") => {
-    if (showResult) return;
+    if (showResult || !config) return; // config가 없으면 투표 불가
     
     navigator.vibrate?.(20);
     
@@ -555,7 +562,7 @@ export default function PollClient({
           {/* A */}
           <button
             onClick={() => handleVote("A")}
-            disabled={showResult}
+            disabled={showResult || !config}
             className={`
               group relative w-36 h-36 sm:w-44 sm:h-44 md:w-52 md:h-52 rounded-[1.5rem] sm:rounded-[2rem] overflow-hidden
               transition-all duration-300 ease-out touch-manipulation select-none
@@ -626,7 +633,7 @@ export default function PollClient({
           {/* B */}
           <button
             onClick={() => handleVote("B")}
-            disabled={showResult}
+            disabled={showResult || !config}
             className={`
               group relative w-36 h-36 sm:w-44 sm:h-44 md:w-52 md:h-52 rounded-[1.5rem] sm:rounded-[2rem] overflow-hidden
               transition-all duration-300 ease-out touch-manipulation select-none
