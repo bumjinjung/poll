@@ -8,7 +8,7 @@ export interface PollTemplate {
 	right: { label: string; emoji: string };
 }
 
-/** SNS 트렌드형, 유행/자극형 밸런스게임 1개 생성 (클리셰 허용: 이성친구, 아아/뜨아 등) */
+/** SNS 트렌드형 호불호 밸런스게임 1개 생성 (음식, 일상, 밈 등 다양한 주제) */
 export async function generatePollWithChatGPT(
 	recentQuestions: string[] = []
 ): Promise<{ success: boolean; poll?: PollTemplate; error?: string }> {
@@ -22,14 +22,15 @@ export async function generatePollWithChatGPT(
 		const globalBanlist: string[] = [];
 
 		const systemPrompt = `
-너는 한국 SNS 밈 기반 밸런스게임 작가다.
+너는 한국 SNS 밈 기반 호불호 밸런스게임 작가다.
+"호불호 밸런스게임"은 두 가지 선택지 중 하나를 고르는 게임으로, 음식, 일상, 감정, 밈, 트렌드 등 다양한 주제를 다룬다.
 문항은 도덕/교과서적일 필요 전혀 없음. 현실·감정·밈·유행·자극을 최우선.
 질문은 짧고 강렬하게. "당신의 선택은?" 같은 꼬리 문장 금지.
-"00 vs 00" 형식이 아니어도 되며, 한 문장만으로 의미가 통하면 충분.
-주제 예: 이성친구 가능/불가능, 아아 vs 뜨아, 읽씹/既読, 퇴사, 야근, 헬스장, 소개팅, DM, 돈, 체면, 민망함, 질투, 자존심 등.
+"00 vs 00" 형식이 가장 직관적이지만, 한 문장만으로 의미가 통하면 충분.
+주제 예: 후라이드 vs 양념, 김치찌개 vs 된장찌개, 짜장면 vs 짬뽕, 민트초코 찬반, 아아 vs 뜨아, 이성친구 가능/불가능, 읽씹/既読, 퇴사, 야근, 헬스장, 소개팅, DM, 돈, 체면, 민망함, 질투, 자존심, 라면 vs 밥, 치킨 vs 피자 등.
 금지: 노골적 성적 표현, 혐오/차별, 직접적 폭력 조장.
 규칙:
-- question: 3~30자, 밈 감성/현실 대화체 가능.
+- question: 3~30자, 밈 감성/현실 대화체 가능, "00 vs 00" 형식 선호.
 - left/right: 1~15자, 의미 중복 금지, 각 1개 이모지 포함(자연스러운 이모지).
 - 오직 JSON만 출력.
 `.trim();
@@ -39,13 +40,15 @@ export async function generatePollWithChatGPT(
 ${[...globalBanlist, ...recentQuestions].join("\n") || "- (없음)"}
 
 예시(JSON only):
-{"question":"이성친구, 가능?","left":{"label":"가능","emoji":"🫱"},"right":{"label":"불가능","emoji":"⛔"}}
+{"question":"후라이드 vs 양념","left":{"label":"후라이드","emoji":"🍗"},"right":{"label":"양념","emoji":"🌶️"}}
+{"question":"김치찌개 vs 된장찌개","left":{"label":"김치찌개","emoji":"🥘"},"right":{"label":"된장찌개","emoji":"🍲"}}
+{"question":"짜장면 vs 짬뽕","left":{"label":"짜장면","emoji":"🖤"},"right":{"label":"짬뽕","emoji":"🔥"}}
 {"question":"아아 vs 뜨아","left":{"label":"아아","emoji":"🧊"},"right":{"label":"뜨아","emoji":"🔥"}}
-{"question":"단톡방 읽씹 사태","left":{"label":"이모지로 마무리","emoji":"😅"},"right":{"label":"끝까지 잠수","emoji":"🌊"}}
-{"question":"퇴사 메일 임시보관함 7일째","left":{"label":"보낸다","emoji":"📨"},"right":{"label":"버틴다","emoji":"🗓️"}}
-{"question":"새벽 감성 DM","left":{"label":"보낸다","emoji":"🫣"},"right":{"label":"참는다","emoji":"⏰"}}
+{"question":"이성친구, 가능?","left":{"label":"가능","emoji":"🫱"},"right":{"label":"불가능","emoji":"⛔"}}
+{"question":"민트초코","left":{"label":"찬성","emoji":"🍃"},"right":{"label":"반대","emoji":"🚫"}}
+{"question":"치킨 vs 피자","left":{"label":"치킨","emoji":"🍗"},"right":{"label":"피자","emoji":"🍕"}}
 
-위 톤으로 새로운 밸런스게임 질문 1개 생성:
+위 톤으로 새로운 호불호 밸런스게임 질문 1개 생성:
 형식(JSON only):
 {"question":"문장","left":{"label":"선택1","emoji":"🙂"},"right":{"label":"선택2","emoji":"😎"}}
 `.trim();
@@ -69,7 +72,7 @@ ${[...globalBanlist, ...recentQuestions].join("\n") || "- (없음)"}
 			.filter(Boolean) as PollTemplate[];
 
 		const pick = pickValid(candidates, [...globalBanlist, ...recentQuestions]);
-		if (!pick) return { success: false, error: "유효한 밸런스게임을 만들지 못했습니다." };
+		if (!pick) return { success: false, error: "유효한 호불호 밸런스게임을 만들지 못했습니다." };
 
 		// 마무리 정리(트림/일관화)
 		const fixed: PollTemplate = {
